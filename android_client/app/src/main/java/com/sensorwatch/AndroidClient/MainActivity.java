@@ -21,8 +21,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btSendMessage).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int nbrepet = Integer.parseInt(((TextView) findViewById(R.id.EdNbRepete)).getText().toString());
-                String data = ((TextView) findViewById(R.id.EdText)).getText().toString();
+                int nbrepet = 1;
+                String data = "Pain au lait";
                 int port = Integer.valueOf(((TextView) findViewById(R.id.EdPort)).getText().toString());
                 String address = ((TextView) findViewById(R.id.EdIpServeur)).getText().toString();
                 SendData(nbrepet,data,port,address);
