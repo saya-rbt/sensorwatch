@@ -115,5 +115,32 @@
         app:layout_constraintStart_toEndOf="@+id/tvFirst"
         app:layout_constraintTop_toBottomOf="@+id/EdPort" />
 
+    <TextView
+        android:id="@+id/tvValueFirst"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btSendMessage" />
+
+    <TextView
+        android:id="@+id/TvValueSecond"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="36dp"
+        app:layout_constraintEnd_toEndOf="@+id/btSendMessage"
+        app:layout_constraintStart_toStartOf="@+id/btSendMessage"
+        app:layout_constraintTop_toBottomOf="@+id/btSendMessage" />
+
+    <TextView
+        android:id="@+id/tvValueThrid"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:layout_marginEnd="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btSendMessage" />
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

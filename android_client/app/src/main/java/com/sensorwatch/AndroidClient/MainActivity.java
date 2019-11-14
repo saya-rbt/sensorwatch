@@ -15,20 +15,22 @@ import java.net.SocketException;
 
 public class MainActivity extends AppCompatActivity {
 
+    private DatagramSocket UDPSocket;
+    private DatagramSocket UDPSocketMaj;
+    private InetAddress address;
+    private  int port;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        final Spinner spFirst = (Spinner)findViewById(R.id.spinFirst);
-        final Spinner spSecond = (Spinner)findViewById(R.id.spinSecond);
-        final Spinner spThird = (Spinner)findViewById(R.id.spinThird);
-        // Create an ArrayAdapter using the string array and a default spinner layout
+        final Spinner spFirst = (Spinner) findViewById(R.id.spinFirst);
+        final Spinner spSecond = (Spinner) findViewById(R.id.spinSecond);
+        final Spinner spThird = (Spinner) findViewById(R.id.spinThird);
         ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
                 R.array.planets_array, android.R.layout.simple_spinner_item);
-        // Specify the layout to use when the list of choices appears
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        // Apply the adapter to the spinner
         spFirst.setAdapter(adapter);
         spSecond.setAdapter(adapter);
         spThird.setAdapter(adapter);
@@ -40,25 +42,21 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 int nbrepet = 1;
-                String data = spFirst.getSelectedItem().toString().substring(0,1) +  spSecond.getSelectedItem().toString().substring(0,1) + spThird.getSelectedItem().toString().substring(0,1)  ;
+                String data = spFirst.getSelectedItem().toString().substring(0, 1) + spSecond.getSelectedItem().toString().substring(0, 1) + spThird.getSelectedItem().toString().substring(0, 1);
                 int port = Integer.valueOf(((TextView) findViewById(R.id.EdPort)).getText().toString());
                 String address = ((TextView) findViewById(R.id.EdIpServeur)).getText().toString();
-                SendData(nbrepet,data,port,address);
+                SendData(nbrepet, data, port, address);
             }
         });
+        ScanData();
     }
-
-
-
-    private DatagramSocket UDPSocket;
-    private InetAddress address;
-    private int port;
 
     /// Initialise une socket avec les parametres recupere dans l'interface graphique pour l'envoi des données
     public void Initreseau(InetAddress address) {
         try {
             this.UDPSocket = new DatagramSocket();
             this.address = address;
+            this.UDPSocketMaj = new DatagramSocket();
         } catch (SocketException e) {
             e.printStackTrace();
         }
@@ -73,8 +71,6 @@ public class MainActivity extends AppCompatActivity {
                     DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
                     UDPSocket.send(packet);
                     DatagramPacket packetreponse = null;
-                    UDPSocket.receive(packetreponse);
-                    DisplayData(packetreponse);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -84,7 +80,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /// Envoi X fois la data
-    public void SendData(final int nbRepet, final String Sdata , final int port, final String address) {
+    public void SendData(final int nbRepet, final String Sdata, final int port, final String address) {
         new Thread() {
             @Override
             public void run() {
@@ -92,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
                     Initreseau(InetAddress.getByName(address));
                     for (int i = 0; i < nbRepet; i++) {
                         byte[] data = Sdata.getBytes();
-                        SendInstruction(data,port);
+                        SendInstruction(data, port);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -103,8 +99,48 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Modifie l affichage en fonction de la tram recu
-    public void DisplayData(DatagramPacket data) {
-        System.out.println(data);
+    public void ScanData() {
+
+        new Thread() {
+            @Override
+            public void run() {
+                try {
+                    while (true) {
+                        sleep(1000);
+                        byte[] getvallb = "getValues()".getBytes();
+                        DatagramPacket packet = new DatagramPacket(getvallb, getvallb.length, address, port);
+                        UDPSocketMaj.send(packet);
+                        DatagramPacket packetreponse = null;
+                        UDPSocketMaj.receive(packetreponse);
+                        DisplayData(packetreponse);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            }
+        }.start();
+
     }
+
+    public void DisplayData(DatagramPacket response)    {
+        try {
+            final TextView tvValuesFirst = (TextView) findViewById(R.id.tvValueFirst);
+            final TextView tvValuesSecond = (TextView) findViewById(R.id.TvValueSecond);
+            final TextView tvValueThrid = (TextView) findViewById(R.id.tvValueThrid);
+            final Spinner spFirst = (Spinner) findViewById(R.id.spinFirst);
+            final Spinner spSecond = (Spinner) findViewById(R.id.spinSecond);
+            final Spinner spThird = (Spinner) findViewById(R.id.spinThird);
+
+            tvValuesFirst.setText(spFirst.getSelectedItem().toString());
+            tvValuesSecond.setText(spSecond.getSelectedItem().toString());
+            tvValueThrid.setText(spThird.getSelectedItem().toString());
+            
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        }
 
 }
