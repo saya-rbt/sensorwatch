@@ -135,7 +135,7 @@ public class MainActivity extends AppCompatActivity {
             tvValuesFirst.setText(spFirst.getSelectedItem().toString());
             tvValuesSecond.setText(spSecond.getSelectedItem().toString());
             tvValueThrid.setText(spThird.getSelectedItem().toString());
-            
+
         }
         catch (Exception e) {
             e.printStackTrace();
