@@ -6,6 +6,40 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <Spinner
+        android:id="@+id/spinSecond"
+        android:layout_width="249dp"
+        android:layout_height="28dp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintEnd_toEndOf="@+id/spinFirst"
+        app:layout_constraintTop_toBottomOf="@+id/spinFirst" />
+
+    <Spinner
+        android:id="@+id/spinThird"
+        android:layout_width="249dp"
+        android:layout_height="28dp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintEnd_toEndOf="@+id/spinSecond"
+        app:layout_constraintTop_toBottomOf="@+id/spinSecond" />
+
+    <TextView
+        android:id="@+id/tvSecond"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Second"
+        app:layout_constraintStart_toStartOf="@+id/tvFirst"
+        app:layout_constraintTop_toTopOf="@+id/spinSecond" />
+
+    <TextView
+        android:id="@+id/tvThird"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Third"
+        app:layout_constraintStart_toStartOf="@+id/tvSecond"
+        app:layout_constraintTop_toTopOf="@+id/spinThird" />
+
     <EditText
         android:id="@+id/EdIpServeur"
         android:layout_width="270dp"
@@ -28,17 +62,18 @@
         android:inputType="textPersonName"
         android:text="8081"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@+id/EdIpServeur"
         app:layout_constraintTop_toBottomOf="@+id/EdIpServeur" />
 
     <Button
         android:id="@+id/btSendMessage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="32dp"
         android:text="Send Message"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/tvports"
-        app:layout_constraintTop_toBottomOf="@+id/EdPort"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/spinThird"
         tools:ignore="MissingConstraints" />
 
     <TextView
@@ -57,13 +92,28 @@
         android:id="@+id/tvports"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="32dp"
         android:layout_marginTop="16dp"
-        android:layout_marginEnd="32dp"
         android:text="Port :"
-        app:layout_constraintEnd_toStartOf="@+id/EdPort"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintStart_toStartOf="@+id/tvip"
         app:layout_constraintTop_toTopOf="@+id/EdPort" />
+
+    <TextView
+        android:id="@+id/tvFirst"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="First"
+        app:layout_constraintStart_toStartOf="@+id/tvports"
+        app:layout_constraintTop_toTopOf="@+id/spinFirst" />
+
+    <Spinner
+        android:id="@+id/spinFirst"
+        android:layout_width="249dp"
+        android:layout_height="28dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintEnd_toEndOf="@+id/EdPort"
+        app:layout_constraintStart_toEndOf="@+id/tvFirst"
+        app:layout_constraintTop_toBottomOf="@+id/EdPort" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

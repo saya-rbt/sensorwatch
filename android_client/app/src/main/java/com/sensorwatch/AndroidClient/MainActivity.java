@@ -2,6 +2,8 @@ package com.sensorwatch.AndroidClient;
 
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -18,11 +20,27 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        final Spinner spFirst = (Spinner)findViewById(R.id.spinFirst);
+        final Spinner spSecond = (Spinner)findViewById(R.id.spinSecond);
+        final Spinner spThird = (Spinner)findViewById(R.id.spinThird);
+        // Create an ArrayAdapter using the string array and a default spinner layout
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+                R.array.planets_array, android.R.layout.simple_spinner_item);
+        // Specify the layout to use when the list of choices appears
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        // Apply the adapter to the spinner
+        spFirst.setAdapter(adapter);
+        spSecond.setAdapter(adapter);
+        spThird.setAdapter(adapter);
+        spFirst.setSelection(0);
+        spSecond.setSelection(1);
+        spThird.setSelection(2);
+
         findViewById(R.id.btSendMessage).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 int nbrepet = 1;
-                String data = "Pain au lait";
+                String data = spFirst.getSelectedItem().toString().substring(0,1) +  spSecond.getSelectedItem().toString().substring(0,1) + spThird.getSelectedItem().toString().substring(0,1)  ;
                 int port = Integer.valueOf(((TextView) findViewById(R.id.EdPort)).getText().toString());
                 String address = ((TextView) findViewById(R.id.EdIpServeur)).getText().toString();
                 SendData(nbrepet,data,port,address);
@@ -82,29 +100,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }.start();
 
-    }
-
-    /// scan le port mis en parametre
-    public void ReceiveData(final int portNum) {
-        new Thread() {
-            @Override
-            public void run() {
-                try {
-
-                    final int taille = 1024;
-                    final byte[] buffer = new byte[taille];
-                    DatagramSocket socketReceive = new DatagramSocket(portNum);
-                    while (true) {
-                        DatagramPacket data = new DatagramPacket(buffer, buffer.length);
-                        socketReceive.receive(data);
-                        DisplayData(data);
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-
-            }
-        }.start();
     }
 
     // Modifie l affichage en fonction de la tram recu
