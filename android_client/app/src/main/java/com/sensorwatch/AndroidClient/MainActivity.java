@@ -1,10 +1,12 @@
 package com.sensorwatch.AndroidClient;
 
 import android.os.Bundle;
+import android.util.Range;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.AdapterView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -12,12 +14,18 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
     private DatagramSocket UDPSocket;
     private DatagramSocket UDPSocketMaj;
     private InetAddress address;
+    private Spinner spFirst;
+    private Spinner spSecond;
+    private Spinner spThird;
+    private Spinner[] spinners;
+    private Boolean triggerFlag = false;
     private  int port;
 
     @Override
@@ -25,9 +33,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        final Spinner spFirst = (Spinner) findViewById(R.id.spinFirst);
-        final Spinner spSecond = (Spinner) findViewById(R.id.spinSecond);
-        final Spinner spThird = (Spinner) findViewById(R.id.spinThird);
+        spFirst = (Spinner) findViewById(R.id.spinFirst);
+        spSecond = (Spinner) findViewById(R.id.spinSecond);
+        spThird = (Spinner) findViewById(R.id.spinThird);
         ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
                 R.array.planets_array, android.R.layout.simple_spinner_item);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -37,6 +45,8 @@ public class MainActivity extends AppCompatActivity {
         spFirst.setSelection(0);
         spSecond.setSelection(1);
         spThird.setSelection(2);
+
+        spinners = new Spinner[] {spFirst, spSecond, spThird};
 
         findViewById(R.id.btSendMessage).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -49,6 +59,52 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         ScanData();
+    }
+
+    @Override
+    protected void onStart(){
+        super.onStart();
+        AdapterView.OnItemSelectedListener selectListener = new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
+                if(triggerFlag){
+                    triggerFlag = false;
+                    return;
+                }
+                Spinner toSwap = null;
+                int swapValue = 0;
+                ArrayList<Integer> myList = new ArrayList<>();
+                myList.add(0);
+                myList.add(1);
+                myList.add(2);
+
+                myList.remove(myList.indexOf(position));
+                for(Spinner item : spinners){
+                    if(parentView.getId() != item.getId()){
+                        if(item.getSelectedItemPosition() == position){
+                            toSwap = item;
+                        }
+                        else{
+                            myList.remove(myList.indexOf(item.getSelectedItemPosition()));
+                        }
+                    }
+                }
+                if(toSwap != null){
+                    triggerFlag = true;
+                    toSwap.setSelection(myList.get(0));
+                }
+
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parentView) {
+                // your code here
+            }
+        };
+
+        spFirst.setOnItemSelectedListener(selectListener);
+        spSecond.setOnItemSelectedListener(selectListener);
+        spThird.setOnItemSelectedListener(selectListener);
     }
 
     /// Initialise une socket avec les parametres recupere dans l'interface graphique pour l'envoi des données
