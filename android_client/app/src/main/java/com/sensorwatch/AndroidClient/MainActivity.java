@@ -26,7 +26,6 @@ public class MainActivity extends AppCompatActivity {
     private Spinner spThird;
     private Spinner[] spinners;
     private Boolean triggerFlag = false;
-    private  int port;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,7 +57,14 @@ public class MainActivity extends AppCompatActivity {
                 SendData(nbrepet, data, port, address);
             }
         });
-        ScanData();
+
+        findViewById(R.id.btReceiveData).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int port = Integer.valueOf(((TextView) findViewById(R.id.EdPort)).getText().toString());
+                ScanData(port);
+            }
+        });
     }
 
     @Override
@@ -155,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Modifie l affichage en fonction de la tram recu
-    public void ScanData() {
+    public void ScanData(final int port) {
 
         new Thread() {
             @Override
@@ -163,8 +169,8 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     while (true) {
                         sleep(1000);
-                        byte[] getvallb = "getValues()".getBytes();
-                        DatagramPacket packet = new DatagramPacket(getvallb, getvallb.length, address, port);
+                        byte[] message = "getValues()".getBytes();
+                        DatagramPacket packet = new DatagramPacket(message, message.length, address, port);
                         UDPSocketMaj.send(packet);
                         DatagramPacket packetreponse = null;
                         UDPSocketMaj.receive(packetreponse);

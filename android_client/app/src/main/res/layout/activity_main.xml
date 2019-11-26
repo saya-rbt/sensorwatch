@@ -76,6 +76,17 @@
         app:layout_constraintTop_toBottomOf="@+id/spinThird"
         tools:ignore="MissingConstraints" />
 
+    <Button
+        android:id="@+id/btReceiveData"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:text="Receive Data"
+        app:layout_constraintEnd_toEndOf="@+id/btSendMessage"
+        app:layout_constraintStart_toStartOf="@+id/btSendMessage"
+        app:layout_constraintTop_toBottomOf="@+id/btSendMessage"
+        tools:ignore="MissingConstraints" />
+
     <TextView
         android:id="@+id/tvip"
         android:layout_width="wrap_content"
@@ -122,16 +133,15 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="32dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btSendMessage" />
+        app:layout_constraintTop_toBottomOf="@+id/btReceiveData" />
 
     <TextView
         android:id="@+id/TvValueSecond"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="36dp"
-        app:layout_constraintEnd_toEndOf="@+id/btSendMessage"
-        app:layout_constraintStart_toStartOf="@+id/btSendMessage"
-        app:layout_constraintTop_toBottomOf="@+id/btSendMessage" />
+        android:layout_marginTop="32dp"
+        app:layout_constraintTop_toBottomOf="@+id/btReceiveData"
+        tools:layout_editor_absoluteX="211dp" />
 
     <TextView
         android:id="@+id/tvValueThrid"
@@ -140,7 +150,7 @@
         android:layout_marginTop="32dp"
         android:layout_marginEnd="16dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btSendMessage" />
+        app:layout_constraintTop_toBottomOf="@+id/btReceiveData" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>
