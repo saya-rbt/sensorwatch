@@ -1,0 +1,5 @@
+rf-sub1ghz/objs
+apps/chain/sensors/*.ld
+apps/chain/receptor/*.ld
+*.bin
+*.elf
