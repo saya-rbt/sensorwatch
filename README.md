@@ -4,7 +4,7 @@ School IoT chain project using RF-Sub1Ghz microcontrollers
 
 ## TODO
 
-- [x] Rewrite the README
+- [ ] Rewrite the README
 - [x] Write a proper Makefile
 - [ ] Draw the sequence diagram
 - [ ] Specify the technical specs

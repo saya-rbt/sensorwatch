@@ -430,7 +430,7 @@ void handle_rf_rx_data(void)
 
 	/* Check for received packet (and get it if any) */
 	ret = cc1101_receive_packet(data, RF_BUFF_LEN, &status);
-	if(ret != 0)
+	if(ret < 0)
 	{
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_RECEIVE, ret);
@@ -446,8 +446,8 @@ void handle_rf_rx_data(void)
 // 	uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
 // #endif
 
-	char checksum[8];
-	snprintf(checksum, sizeof(checksum), "%c%c%c%c%c%c%c%c",
+	char checksumByte[8];
+	snprintf(checksumByte, sizeof(checksumByte), "%c%c%c%c%c%c%c%c",
 		(data[3]&0x80)?'1':'0',
 		(data[3]&0x40)?'1':'0',
 		(data[3]&0x20)?'1':'0',
@@ -461,7 +461,7 @@ void handle_rf_rx_data(void)
 	// If the packet has the correct header and all
 	// letters are different (ie. we don't ask for the same value twice),
 	// we handle the packet
-	if((checksum[0] == 0) && (checksum[1] == 1) && 
+	if((checksumByte[0] == 0) && (checksumByte[1] == 1) && 
 		(
 			(data[4] != data[5]) &&
 			(data[5] != data[6]) &&
@@ -475,21 +475,21 @@ void handle_rf_rx_data(void)
 			switch(data[i])
 			{
 				case 'T':
-					if((checksum[j] == 0) && (checksum[j+1] == 0))
+					if((checksumByte[j] == 0) && (checksumByte[j+1] == 0))
 					{
 						tmppos = i-4;
 						break;
 					}
 					else return;
 				case 'L':
-					if((checksum[j] == 0) && (checksum[j+1] == 1))
+					if((checksumByte[j] == 0) && (checksumByte[j+1] == 1))
 					{
 						luxpos = i-4;
 						break;
 					}
 					else return;
 				case 'H':
-					if((checksum[j] == 1) && (checksum[j+1] == 0))
+					if((checksumByte[j] == 1) && (checksumByte[j+1] == 0))
 					{
 						hmdpos = i-4;
 						break;
@@ -661,6 +661,10 @@ void send_on_rf(void)
 		display_line(7, 0, data);
 		gpio_clear(status_led_green);
 		gpio_set(status_led_red);
+	}
+	else
+	{
+		uprintf(UART0, "connard");
 	}
 
 // #ifdef DEBUG

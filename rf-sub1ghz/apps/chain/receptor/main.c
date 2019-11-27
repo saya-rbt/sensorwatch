@@ -1,7 +1,7 @@
 /****************************************************************************
- * rf-sub1ghz/sensors/main.c
+ * rf-sub1ghz/receptor/main.c
  *
- * BME280 sensors reading and displaying on Adafruit display screen
+ * Gateway microcontroller between the sensors one and the Raspberry Pi
  *
  * Copyright 2019 sayabiws@gmail.com
  *
@@ -109,7 +109,7 @@ const struct pio cc1101_miso_pin = LPC_SSP0_MISO_PIO_0_16;
 const struct pio cc1101_gdo0 = LPC_GPIO_0_6;
 const struct pio cc1101_gdo2 = LPC_GPIO_0_7;
 
-const struct pio temp_alert = LPC_GPIO_0_3;
+// const struct pio temp_alert = LPC_GPIO_0_3;
 
 const struct pio status_led_green = LPC_GPIO_0_28;
 // const struct pio status_led_orange = LPC_GPIO_0_10;
@@ -197,6 +197,7 @@ void data_rx(uint8_t c)
 static volatile int check_rx = 0;
 void rf_rx_calback(uint32_t gpio)
 {
+    // uprintf(UART0, "fe");
     check_rx = 1;
 }
 
@@ -227,22 +228,33 @@ void rf_config(void)
 // #endif
 }
 
+typedef struct vpayload_t
+{
+    char checksum;
+    uint32_t tmp;
+    uint16_t hmd;
+    uint32_t lux;
+} vpayload_t;
+
+static volatile vpayload_t cc_tx_vpayload;
+
 void handle_rf_rx_data(void)
 {
     uint8_t data[RF_BUFF_LEN];
-    int8_t ret = 0;
+    // int8_t ret = 0;
     uint8_t status = 0;
 
     /* Check for received packet (and get it if any) */
-    ret = cc1101_receive_packet(data, RF_BUFF_LEN, &status);
-    if(ret != 0)
-    {
-        // char data[20];
-        // snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_RECEIVE, ret);
-        // display_line(7, 0, data);
-        gpio_clear(status_led_green);
-        gpio_set(status_led_red);
-    }
+    cc1101_receive_packet(data, RF_BUFF_LEN, &status);
+    // ret = cc1101_receive_packet(data, RF_BUFF_LEN, &status);
+    // if(ret != 0)
+    // {
+    //     // char data[20];
+    //     // snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_RECEIVE, ret);
+    //     // display_line(7, 0, data);
+    //     gpio_clear(status_led_green);
+    //     gpio_set(status_led_red);
+    // }
     /* Go back to RX mode */
     cc1101_enter_rx_mode();
 
@@ -251,22 +263,34 @@ void handle_rf_rx_data(void)
 //  uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
 // #endif
 
+    vpayload_t received_payload;
+
+    // uprintf(UART0, "FIOUZHGIUE");
+
     if(data[1] == MODULE_ADDRESS)
     {
         gpio_clear(status_led_green);
         gpio_set(status_led_red);
-        int len = data[0];
-        int j = 0;
-        char values[len];
-        memcpy(&values, &data[4], len);
-        for(int i = 4; i <= len; i++)
-        {
-            values[j] = data[i];
-            j++;
-        }
+        // int len = data[0];
+        // int j = 0;
+        // char values[len];
+        memcpy(&received_payload, &data[2], sizeof(vpayload_t));
+        // for(int i = 4; i <= len; i++)
+        // {
+        //     values[j] = data[i];
+        //     j++;
+        // }
+
+        // TODO : checksum
+
+        uprintf(UART0, "%d.%d;%d.0;%d.%d", 
+            received_payload.tmp/10, received_payload.tmp%10,
+            received_payload.lux,
+            received_payload.hmd/10, received_payload.hmd%10);
+        // msleep(1000);
+        uprintf(UART0, "\n\r");
         gpio_clear(status_led_red);
-        gpio_clear(status_led_green);
-        uprintf(UART0, "%s e \n\r", values);
+        gpio_set(status_led_green);
     }       
 }
 
@@ -277,7 +301,7 @@ void handle_rf_rx_data(void)
  * cc_ptr rewind to 0 may be lost. */
 static volatile uint32_t cc_tx = 0;
 static volatile uint8_t cc_tx_buff[RF_BUFF_LEN];
-static volatile uint8_t cc_ptr = 1; // We start at 1 because 0 is the source
+static volatile uint8_t cc_ptr = 2; // We start at 2 because 0 is the source
 static volatile unsigned char cc_checksum = 0;
 void handle_uart_cmd(uint8_t c)
 {
@@ -298,7 +322,40 @@ void handle_uart_cmd(uint8_t c)
     // Data
     // Most of the data is handled in the main loop, so we just use it as it is
     // passed here
+
+    char checksumByte[8];
+    checksumByte[0] = 0;
+    checksumByte[1] = 1;
+
+    if(c == 'T')
+    {
+        checksumByte[cc_ptr] = 0;
+        checksumByte[cc_ptr+1] = 0;
+    }
+    else if(c == 'L')
+    {
+        checksumByte[cc_ptr] = 0;
+        checksumByte[cc_ptr+1] = 1;
+    }
+    else if(c == 'H')
+    {
+        checksumByte[cc_ptr] = 1;
+        checksumByte[cc_ptr+1] = 0;
+    }
+    else
+    {
+        checksumByte[cc_ptr] = 1;
+        checksumByte[cc_ptr+1] = 1;
+    }
+
+    // BIT OPERATIONS MAGIC
+    cc_checksum = 0;
+    for (int i = 0; i < 8; ++i )
+        cc_checksum |= (checksumByte[i] == '1') << (7 - i);
+
+    uprintf(UART0, "--- %c\n\r", cc_checksum);
     cc_tx_buff[1] = cc_checksum;
+
     if (cc_ptr < RF_BUFF_LEN) {
         cc_tx_buff[cc_ptr++] = c;
     } else {
@@ -306,7 +363,13 @@ void handle_uart_cmd(uint8_t c)
         cc_ptr = 0;
     }
     if ((c == '\n') || (c == '\r')) {
+        uprintf(UART0, "done!");
+        gpio_clear(status_led_green);
+        gpio_set(status_led_red);
+        msleep(100);
         cc_tx = 1;
+        gpio_clear(status_led_red);
+        gpio_set(status_led_green);
     }
 }
 
@@ -328,7 +391,7 @@ void send_on_rf(void)
         cc1101_flush_tx_fifo();
     }
     ret = cc1101_send_packet(cc_tx_data, (tx_len + 2));
-    if(ret != 0)
+    if(ret < 0)
     {
         // char data[20];
         // snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_SEND, ret);
@@ -348,7 +411,7 @@ int main(void)
 {
     // int ret = 0;
     system_init();
-    uart_on(UART0, 115200, data_rx);
+    uart_on(UART0, 115200, handle_uart_cmd);
     i2c_on(I2C0, I2C_CLK_100KHz, I2C_MASTER);
     ssp_master_on(0, LPC_SSP_FRAME_SPI, 8, 4*1000*1000); /* bus_num, frame_type, data_width, rate */
 
@@ -374,18 +437,25 @@ int main(void)
 
         //TODO : uprintf what we receive through handle_rf_rx_data
 
+        // For some fucking reason we won't enter handle_rf_rx_data if we don't 
+        // print something here.
+        // So I just print a NULL character byte.
+        uprintf(UART0, "%c", 0x00);
+        // msleep(1000);
         if (cc_tx == 1) 
         {
             send_on_rf();
             cc_tx = 0;
         }
 
+        // uprintf(UART0,"b");
         /* Do not leave radio in an unknown or unwated state */
         do
         {
             status = (cc1101_read_status() & CC1101_STATE_MASK);
         } while (status == CC1101_STATE_TX);
 
+        // uprintf(UART0,"C");
         if (status != CC1101_STATE_RX) {
             static uint8_t loop = 0;
             loop++;
@@ -400,10 +470,11 @@ int main(void)
             }
         }
 
+        // uprintf(UART0,"D");
         if (check_rx == 1)
         {
-            check_rx = 0;
             handle_rf_rx_data();
+            check_rx = 0;
         }
     }
     return 0;
