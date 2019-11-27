@@ -26,11 +26,21 @@ public class MainActivity extends AppCompatActivity {
     private Spinner spThird;
     private Spinner[] spinners;
     private Boolean triggerFlag = false;
+    private TextView tvValuesFirst;
+    private TextView tvValuesSecond;
+    private TextView tvValueThrid;
+    private String Strtemp;
+    private String Strlumi;
+    private String StrHumi;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        this.tvValuesFirst = (TextView) findViewById(R.id.tvValueFirst);
+        this.tvValuesSecond = (TextView) findViewById(R.id.TvValueSecond);
+        this.tvValueThrid = (TextView) findViewById(R.id.tvValueThrid);
 
         spFirst = (Spinner) findViewById(R.id.spinFirst);
         spSecond = (Spinner) findViewById(R.id.spinSecond);
@@ -163,40 +173,93 @@ public class MainActivity extends AppCompatActivity {
     // Modifie l affichage en fonction de la tram recu
     public void ScanData(final int port) {
 
-        new Thread() {
+        Thread test = new Thread() {
             @Override
             public void run() {
                 try {
-                    while (true) {
-                        sleep(1000);
                         byte[] message = "getValues()".getBytes();
                         DatagramPacket packet = new DatagramPacket(message, message.length, address, port);
                         UDPSocketMaj.send(packet);
-                        DatagramPacket packetreponse = null;
+                        final int MTU = 1500;
+                        byte[] data;
+                        data = new byte[MTU];
+                        DatagramPacket packetreponse= new DatagramPacket(data, MTU);
                         UDPSocketMaj.receive(packetreponse);
-                        DisplayData(packetreponse);
-                    }
+                        String pain = new String(packetreponse.getData());
+                        String[] answers = pain.split(";");
+                        Strtemp = answers[0];
+                        Strlumi = answers[1];
+                        StrHumi = answers[2];
+
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
 
             }
-        }.start();
+        };
+        test.start();
+        try {
+            test.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        DisplayData(Strtemp,Strlumi,StrHumi);
 
     }
 
-    public void DisplayData(DatagramPacket response)    {
+    public void DisplayData(String Strtemp , String Strlumi , String StrHumi)    {
         try {
-            final TextView tvValuesFirst = (TextView) findViewById(R.id.tvValueFirst);
-            final TextView tvValuesSecond = (TextView) findViewById(R.id.TvValueSecond);
-            final TextView tvValueThrid = (TextView) findViewById(R.id.tvValueThrid);
-            final Spinner spFirst = (Spinner) findViewById(R.id.spinFirst);
-            final Spinner spSecond = (Spinner) findViewById(R.id.spinSecond);
-            final Spinner spThird = (Spinner) findViewById(R.id.spinThird);
 
-            tvValuesFirst.setText(spFirst.getSelectedItem().toString());
-            tvValuesSecond.setText(spSecond.getSelectedItem().toString());
-            tvValueThrid.setText(spThird.getSelectedItem().toString());
+            this.tvValuesFirst.setText(this.spFirst.getSelectedItem().toString());
+            this.tvValuesSecond.setText(this.spSecond.getSelectedItem().toString());
+            this.tvValueThrid.setText(this.spThird.getSelectedItem().toString());
+
+            switch (this.tvValuesFirst.getText().toString())
+            {
+                case "Temperature" :
+                    this.tvValuesFirst.setText(this.spFirst.getSelectedItem().toString()+" : "+Strtemp);
+                    break;
+                case "Humidity" :
+                    this.tvValuesFirst.setText(this.spFirst.getSelectedItem().toString()+" : "+StrHumi);
+                    break;
+                case "Luminosity" :
+                    this.tvValuesFirst.setText(this.spFirst.getSelectedItem().toString()+" : "+Strlumi);
+                    break;
+                default:
+                    break;
+            }
+
+            switch (this.tvValuesSecond.getText().toString())
+            {
+                case "Temperature" :
+                    this.tvValuesSecond.setText(this.spSecond.getSelectedItem().toString()+" : "+Strtemp);
+                    break;
+                case "Humidity" :
+                    this.tvValuesSecond.setText(this.spSecond.getSelectedItem().toString()+" : "+StrHumi);
+                    break;
+                case "Luminosity" :
+                    this.tvValuesSecond.setText(this.spSecond.getSelectedItem().toString()+" : "+Strlumi);
+                    break;
+                default:
+                    break;
+            }
+
+            switch (this.tvValueThrid.getText().toString())
+            {
+                case "Temperature" :
+                    this.tvValueThrid.setText(this.spThird.getSelectedItem().toString()+" : "+Strtemp);
+                    break;
+                case "Humidity" :
+                    this.tvValueThrid.setText(this.spThird.getSelectedItem().toString()+" : "+StrHumi);
+                    break;
+                case "Luminosity" :
+                    this.tvValueThrid.setText(this.spThird.getSelectedItem().toString()+" : "+Strlumi);
+                    break;
+                default:
+                    break;
+            }
+
 
         }
         catch (Exception e) {
