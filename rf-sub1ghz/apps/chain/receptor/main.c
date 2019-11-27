@@ -308,7 +308,7 @@ void handle_rf_rx_data(void)
         );
 
         // uprintf(UART0, "%x %x\n\r", received_payload.source, received_payload.checksum);
-        uprintf(UART0, "%d.%d;%d.0;%d.%d;\n\r", 
+        uprintf(UART0, "%d.%d;%d.0;%d.%d;", 
             received_payload.tmp/10, received_payload.tmp%10,
             received_payload.lux,
             received_payload.hmd/10, received_payload.hmd%10);
