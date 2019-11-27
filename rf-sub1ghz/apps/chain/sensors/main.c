@@ -414,11 +414,22 @@ static volatile uint8_t hmdpos = 2;
 
 typedef struct vpayload_t
 {
+	char source;
 	char checksum;
 	uint32_t tmp;
 	uint16_t hmd;
 	uint32_t lux;
 } vpayload_t;
+
+typedef struct opayload_t
+{
+    char source;
+    // char checksum;
+    char first;
+    char second;
+    char third;
+    // char full[8];
+} opayload_t;
 
 static volatile vpayload_t cc_tx_vpayload;
 
@@ -446,144 +457,185 @@ void handle_rf_rx_data(void)
 // 	uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
 // #endif
 
-	char checksumByte[8];
-	snprintf(checksumByte, sizeof(checksumByte), "%c%c%c%c%c%c%c%c",
-		(data[3]&0x80)?'1':'0',
-		(data[3]&0x40)?'1':'0',
-		(data[3]&0x20)?'1':'0',
-		(data[3]&0x10)?'1':'0',
-		(data[3]&0x08)?'1':'0',
-		(data[3]&0x04)?'1':'0',
-		(data[3]&0x02)?'1':'0',
-		(data[3]&0x01)?'1':'0'
-	);
+	opayload_t rec_order_payload;
 
-	// If the packet has the correct header and all
-	// letters are different (ie. we don't ask for the same value twice),
-	// we handle the packet
-	if((checksumByte[0] == 0) && (checksumByte[1] == 1) && 
-		(
-			(data[4] != data[5]) &&
-			(data[5] != data[6]) &&
-			(data[6] != data[4])
-		)
-	)
+	// uprintf(UART0, "a\n\r");
+	if(data[1] == MODULE_ADDRESS)
 	{
-		int j = 2;
-		for(int i = 4; i <= 6; i++)
+		gpio_clear(status_led_green);
+        gpio_set(status_led_red);
+
+        uprintf(UART0, "\n\rdata v:%x %x %x\n\r", data[3], data[4], data[5]);
+        memcpy(&rec_order_payload, &data[2], sizeof(opayload_t));
+        uprintf(UART0, "data all:%x %x %x %x\n\r", 
+        	rec_order_payload.source, 
+        	// rec_order_payload.checksum, 
+        	rec_order_payload.first,
+        	rec_order_payload.second,
+        	rec_order_payload.third);
+        // uprintf(UART0, "full:%s\n\r", rec_order_payload.full);
+
+		// char checksumByte[8];
+		// snprintf(rec_order_payload.full, sizeof(rec_order_payload.full), "%c%c%c%c%c%c%c%c",
+		// 	(rec_order_payload.checksum&0x80)?'1':'0',
+		// 	(rec_order_payload.checksum&0x40)?'1':'0',
+		// 	(rec_order_payload.checksum&0x20)?'1':'0',
+		// 	(rec_order_payload.checksum&0x10)?'1':'0',
+		// 	(rec_order_payload.checksum&0x08)?'1':'0',
+		// 	(rec_order_payload.checksum&0x04)?'1':'0',
+		// 	(rec_order_payload.checksum&0x02)?'1':'0',
+		// 	(rec_order_payload.checksum&0x01)?'1':'0'
+		// );
+		// checksumByte[0] = '0';
+		// checksumByte[1] = '1';
+		// checksumByte[2] = '0';
+		// checksumByte[3] = '0';
+		// checksumByte[4] = '1';
+		// checksumByte[5] = '0';
+		// checksumByte[6] = '0';
+		// checksumByte[7] = '1';
+
+		// If the packet has the correct header and all
+		// letters are different (ie. we don't ask for the same value twice),
+		// we handle the packet
+		// uprintf(UART0, "struct:%s %x\n\r", checksumByte, rec_order_payload.checksum);
+		uprintf(UART0, "st values:%x %x %x\n\r", rec_order_payload.first,
+			rec_order_payload.second,
+			rec_order_payload.third);
+		if(/*(checksumByte[0] == '0') && (checksumByte[1] == '1') && */
+			(
+				(rec_order_payload.first != rec_order_payload.second) &&
+				(rec_order_payload.second != rec_order_payload.third) &&
+				(rec_order_payload.third != rec_order_payload.first)
+			) && data[1] == MODULE_ADDRESS
+		)
 		{
-			switch(data[i])
+			uprintf(UART0, "source ok\n\r");
+			// int j = 2;
+			// for(int i = 4; i <= 6; i++)
+			// {
+			// 	uprintf(UART0,"%c%c%c\n\r", data[i], data[i], data[i]);
+			// 	switch(data[i])
+			// 	{
+			// 		case 'T':
+			// 			if((checksumByte[j] == 0) && (checksumByte[j+1] == 0))
+			// 			{
+			// 				tmppos = i-4;
+			// 				break;
+			// 			}
+			// 			else return;
+			// 		case 'L':
+			// 			if((checksumByte[j] == 0) && (checksumByte[j+1] == 1))
+			// 			{
+			// 				luxpos = i-4;
+			// 				break;
+			// 			}
+			// 			else return;
+			// 		case 'H':
+			// 			if((checksumByte[j] == 1) && (checksumByte[j+1] == 0))
+			// 			{
+			// 				hmdpos = i-4;
+			// 				break;
+			// 			}
+			// 			else return;
+			// 		default:
+			// 			return;
+			// 	}
+			// 	j = j + 2;
+			// }
+
+			uprintf(UART0, "%x %x %x\n\r", rec_order_payload.first, rec_order_payload.second, rec_order_payload.third);
+			// uprintf(UART0, "%s\n\r", data);
+			switch(rec_order_payload.first)
 			{
 				case 'T':
-					if((checksumByte[j] == 0) && (checksumByte[j+1] == 0))
-					{
-						tmppos = i-4;
+					uprintf(UART0,"1t\n\r");
+					// if((checksumByte[2] == '0') && (checksumByte[3] == '0'))
+					// {
+					// 	uprintf(UART0, "00\n\r");
+						tmppos = 0;
 						break;
-					}
-					else return;
+					// }
 				case 'L':
-					if((checksumByte[j] == 0) && (checksumByte[j+1] == 1))
-					{
-						luxpos = i-4;
+					uprintf(UART0,"1l\n\r");
+					// if((checksumByte[2] == '0') && (checksumByte[3] == '1'))
+					// {
+					// 	uprintf(UART0, "01\n\r");
+						luxpos = 0;
 						break;
-					}
-					else return;
+					// }
 				case 'H':
-					if((checksumByte[j] == 1) && (checksumByte[j+1] == 0))
-					{
-						hmdpos = i-4;
+					uprintf(UART0,"1h\n\r");
+					// if((checksumByte[2] == '1') && (checksumByte[3] == '0'))
+					// {
+					// 	uprintf(UART0, "10\n\r");
+						hmdpos = 0;
 						break;
-					}
-					else return;
-				default:
-					return;
+					// }
 			}
-			j = j + 2;
+
+			switch(rec_order_payload.second)
+			{
+				case 'T':
+					uprintf(UART0,"2t\n\r");
+					// if((checksumByte[4] == '0') && (checksumByte[5] == '0'))
+					// {
+					// 	uprintf(UART0, "00\n\r");
+						tmppos = 1;
+						break;
+					// }
+				case 'L':
+					uprintf(UART0,"2l\n\r");
+					// if((checksumByte[4] == '0') && (checksumByte[5] == '1'))
+					// {
+					// 	uprintf(UART0, "01\n\r");
+						luxpos = 1;
+						break;
+					// }
+				case 'H':
+					uprintf(UART0,"2h\n\r");
+					// if((checksumByte[4] == '1') && (checksumByte[5] == '0'))
+					// {
+					// 	uprintf(UART0, "10\n\r");
+						hmdpos = 1;
+						break;
+					// }
+			}
+
+			switch(rec_order_payload.third)
+			{
+				case 'T':
+					uprintf(UART0,"3t\n\r");
+					// if((checksumByte[6] == '0') && (checksumByte[7] == '0'))
+					// {
+					// 	uprintf(UART0, "00\n\r");
+						tmppos = 2;
+						break;
+					// }
+				case 'L':
+					uprintf(UART0,"3l\n\r");
+					// if((checksumByte[6] == '0') && (checksumByte[7] == '1'))
+					// {
+					// 	uprintf(UART0, "01\n\r");
+						luxpos = 2;
+						break;
+					// }
+				case 'H':
+					uprintf(UART0,"3h\n\r");
+					// if((checksumByte[6] == '1') && (checksumByte[7] == '0'))
+					// {
+					// 	uprintf(UART0, "10\n\r");
+						hmdpos = 2;
+						break;
+					// }
+			}
+			uprintf(UART0, "%d%d%d\n\r", tmppos, luxpos, hmdpos);
 		}
-
-		// switch(data[4])
-		// {
-		// 	case 'T':
-		// 		if((checksum[2] == 0) && (checksum[3] == 0))
-		// 		{
-		// 			tmppos = 0;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	case 'L':
-		// 		if((checksum[2] == 0) && (checksum[3] == 1))
-		// 		{
-		// 			luxpos = 0;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	case 'H':
-		// 		if((checksum[2] == 1) && (checksum[3] == 0))
-		// 		{
-		// 			hmdpos = 0;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	default:
-		// 		return;
-		// }
-
-		// switch(data[5])
-		// {
-		// 	case 'T':
-		// 		if((checksum[4] == 0) && (checksum[5] == 0))
-		// 		{
-		// 			tmppos = 1;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	case 'L':
-		// 		if((checksum[4] == 0) && (checksum[5] == 1))
-		// 		{
-		// 			luxpos = 1;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	case 'H':
-		// 		if((checksum[4] == 1) && (checksum[5] == 0))
-		// 		{
-		// 			hmdpos = 1;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	default:
-		// 		return;
-		// }
-
-		// switch(data[6])
-		// {
-		// 	case 'T':
-		// 		if((checksum[6] == 0) && (checksum[7] == 0))
-		// 		{
-		// 			tmppos = 2;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	case 'L':
-		// 		if((checksum[6] == 0) && (checksum[7] == 1))
-		// 		{
-		// 			luxpos = 2;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	case 'H':
-		// 		if((checksum[6] == 1) && (checksum[7] == 0))
-		// 		{
-		// 			hmdpos = 2;
-		// 			break;
-		// 		}
-		// 		else return;
-		// 	default:
-		// 		return;
-		// }
+		// We don't change the order if the packet is invalid
+		else return;
+        gpio_clear(status_led_red);
+        gpio_set(status_led_green);
 	}
-	// We don't change the order if the packet is invalid
-	else return;
 }
 
 
@@ -638,6 +690,7 @@ void send_on_rf(void)
 
 	/* Create a local copy */
 	vpayload_t vpayload;
+	vpayload.source = cc_tx_vpayload.source;
 	vpayload.checksum = cc_tx_vpayload.checksum;
 	vpayload.tmp = cc_tx_vpayload.tmp;
 	vpayload.lux = cc_tx_vpayload.lux;
@@ -662,10 +715,10 @@ void send_on_rf(void)
 		gpio_clear(status_led_green);
 		gpio_set(status_led_red);
 	}
-	else
-	{
-		uprintf(UART0, "connard");
-	}
+	// else
+	// {
+	// 	uprintf(UART0, "connard");
+	// }
 
 // #ifdef DEBUG
 // 	// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
@@ -862,6 +915,7 @@ int main(void)
 		// 	lux,
 		// 	humidity/10, humidity%10);
 
+		cc_tx_vpayload.source = MODULE_ADDRESS;
 		cc_tx_vpayload.checksum = cc_checksum;
 		cc_tx_vpayload.tmp = temp;
 		cc_tx_vpayload.lux = lux;
@@ -897,8 +951,8 @@ int main(void)
 
 		if (check_rx == 1)
 		{
-			check_rx = 0;
 			handle_rf_rx_data();
+			check_rx = 0;
 		}
 		msleep(1000);
 	}

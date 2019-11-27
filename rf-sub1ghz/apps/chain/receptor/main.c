@@ -230,11 +230,22 @@ void rf_config(void)
 
 typedef struct vpayload_t
 {
+    char source;
     char checksum;
     uint32_t tmp;
     uint16_t hmd;
     uint32_t lux;
 } vpayload_t;
+
+typedef struct opayload_t
+{
+    char source;
+    // char checksum;
+    char first;
+    char second;
+    char third;
+    // char full[8];
+} opayload_t;
 
 static volatile vpayload_t cc_tx_vpayload;
 
@@ -281,14 +292,28 @@ void handle_rf_rx_data(void)
         //     j++;
         // }
 
-        // TODO : checksum
+        // TODO : finish checksum
+        
+        char checksumByte[8];
+        snprintf(checksumByte, sizeof(checksumByte), "%c%c%c%c%c%c%c%c",
+            // (data[3]&0x80)?'1':'0',
+            (received_payload.checksum&0x80)?'1':'0',
+            (received_payload.checksum&0x40)?'1':'0',
+            (received_payload.checksum&0x20)?'1':'0',
+            (received_payload.checksum&0x10)?'1':'0',
+            (received_payload.checksum&0x08)?'1':'0',
+            (received_payload.checksum&0x04)?'1':'0',
+            (received_payload.checksum&0x02)?'1':'0',
+            (received_payload.checksum&0x01)?'1':'0'
+        );
 
-        uprintf(UART0, "%d.%d;%d.0;%d.%d", 
+        // uprintf(UART0, "%x %x\n\r", received_payload.source, received_payload.checksum);
+        uprintf(UART0, "%d.%d;%d.0;%d.%d;\n\r", 
             received_payload.tmp/10, received_payload.tmp%10,
             received_payload.lux,
             received_payload.hmd/10, received_payload.hmd%10);
         // msleep(1000);
-        uprintf(UART0, "\n\r");
+        // uprintf(UART0, "\n\r");
         gpio_clear(status_led_red);
         gpio_set(status_led_green);
     }       
@@ -301,96 +326,178 @@ void handle_rf_rx_data(void)
  * cc_ptr rewind to 0 may be lost. */
 static volatile uint32_t cc_tx = 0;
 static volatile uint8_t cc_tx_buff[RF_BUFF_LEN];
-static volatile uint8_t cc_ptr = 2; // We start at 2 because 0 is the source
+static volatile uint8_t cc_ptr = 0; // We start at 2 because 0 is the source
+// static volatile uint8_t cc_bit = 2;
 static volatile unsigned char cc_checksum = 0;
+// static volatile char checksumByte[8];
 void handle_uart_cmd(uint8_t c)
 {
-    // TODO IN THE RECEPTOR: since we will recieve changeFormat()
-    // through the RPi (USB, so UART0), we need to handle it differently.
-    // An example is if(c == "T" || c == "L" || c == "H") we call a different
-    // function, that will send it to the sensors microcontroller,
-    // otherwise it will just send it to the Pi and return.
-    // This is not for this code but otherwise i'll forget about it.
-
 // #ifdef DEBUG
 //  // TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
 //  uprintf(UART0, "Received command : %c, buffer size: %d.\n\r",c,cc_ptr);
 // #endif
-    // Source address
-    cc_tx_buff[0] = MODULE_ADDRESS;
 
     // Data
     // Most of the data is handled in the main loop, so we just use it as it is
     // passed here
 
-    char checksumByte[8];
-    checksumByte[0] = 0;
-    checksumByte[1] = 1;
+    // char checksumByte[8];
 
-    if(c == 'T')
-    {
-        checksumByte[cc_ptr] = 0;
-        checksumByte[cc_ptr+1] = 0;
-    }
-    else if(c == 'L')
-    {
-        checksumByte[cc_ptr] = 0;
-        checksumByte[cc_ptr+1] = 1;
-    }
-    else if(c == 'H')
-    {
-        checksumByte[cc_ptr] = 1;
-        checksumByte[cc_ptr+1] = 0;
-    }
-    else
-    {
-        checksumByte[cc_ptr] = 1;
-        checksumByte[cc_ptr+1] = 1;
-    }
+    // if(c == 'T')
+    // {
+    //     checksumByte[cc_bit] = '0';
+    //     checksumByte[cc_bit+1] = '0';
+    // }
+    // else if(c == 'L')
+    // {
+    //     checksumByte[cc_bit] = '0';
+    //     checksumByte[cc_bit+1] = '1';
+    // }
+    // else if(c == 'H')
+    // {
+    //     checksumByte[cc_bit] = '1';
+    //     checksumByte[cc_bit+1] = '0';
+    // }
+    // else
+    // {
+    //     checksumByte[cc_bit] = '1';
+    //     checksumByte[cc_bit+1] = '1';
+    // }
+
+    // cc_bit = cc_bit + 2;
 
     // BIT OPERATIONS MAGIC
-    cc_checksum = 0;
-    for (int i = 0; i < 8; ++i )
-        cc_checksum |= (checksumByte[i] == '1') << (7 - i);
+    // cc_checksum = 0;
+    // for (int i = 0; i < 8; ++i )
+    //     cc_checksum |= (checksumByte[i] == '1') << (7 - i);
 
-    uprintf(UART0, "--- %c\n\r", cc_checksum);
-    cc_tx_buff[1] = cc_checksum;
+    // // uprintf(UART0, "--- %c\n\r", cc_checksum);
+    // cc_tx_buff[1] = cc_checksum;
 
-    if (cc_ptr < RF_BUFF_LEN) {
+    // msleep(1000);
+    if (cc_ptr < RF_BUFF_LEN)
+    {
         cc_tx_buff[cc_ptr++] = c;
     } else {
         // Reset the pointer
         cc_ptr = 0;
+        // cc_bit = 2;
     }
-    if ((c == '\n') || (c == '\r')) {
-        uprintf(UART0, "done!");
+    if ((c == '\n') || (c == '\r') || (cc_ptr>=3)) {
+        // uprintf(UART0, "done!");
         gpio_clear(status_led_green);
         gpio_set(status_led_red);
-        msleep(100);
+        // msleep(100);
         cc_tx = 1;
+        cc_ptr = 0;
         gpio_clear(status_led_red);
         gpio_set(status_led_green);
     }
+    // uprintf(UART0, "%x ", c);
 }
 
 void send_on_rf(void)
 {
-    uint8_t cc_tx_data[RF_BUFF_LEN + 2];
-    uint8_t tx_len = cc_ptr;
+    uint8_t cc_tx_data[sizeof(opayload_t) + 2];
+    // uint8_t tx_len = sizeof(opayload_t);
     int ret = 0;
+    opayload_t opayload;
 
     /* Create a local copy */
-    memcpy((char*)&(cc_tx_data[2]), (char*)cc_tx_buff, tx_len);
+    // Source address
+    opayload.source = MODULE_ADDRESS;
+    opayload.first = cc_tx_buff[0];
+    opayload.second = cc_tx_buff[1];
+    opayload.third = cc_tx_buff[2];
+
+    // checksumByte[0] = '0';
+    // checksumByte[1] = '1';
+
+    // switch(opayload.first)
+    // {
+    //     case 'T':
+    //         checksumByte[2] = '0';
+    //         checksumByte[3] = '0';
+    //         break;
+    //     case 'L':
+    //         checksumByte[2] = '0';
+    //         checksumByte[3] = '1';
+    //         break;
+    //     case 'H':
+    //         checksumByte[2] = '1';
+    //         checksumByte[3] = '0';
+    //         break;
+    //     default:
+    //         checksumByte[2] = '1';
+    //         checksumByte[3] = '1';
+    //         break;
+    // }
+
+    // switch(opayload.second)
+    // {
+    //     case 'T':
+    //         checksumByte[4] = '0';
+    //         checksumByte[5] = '0';
+    //         break;
+    //     case 'L':
+    //         checksumByte[4] = '0';
+    //         checksumByte[5] = '1';
+    //         break;
+    //     case 'H':
+    //         checksumByte[4] = '1';
+    //         checksumByte[5] = '0';
+    //         break;
+    //     default:
+    //         checksumByte[4] = '1';
+    //         checksumByte[5] = '1';
+    //         break;
+    // }
+
+    // switch(opayload.third)
+    // {
+    //     case 'T':
+    //         checksumByte[6] = '0';
+    //         checksumByte[7] = '0';
+    //         break;
+    //     case 'L':
+    //         checksumByte[6] = '0';
+    //         checksumByte[7] = '1';
+    //         break;
+    //     case 'H':
+    //         checksumByte[6] = '1';
+    //         checksumByte[7] = '0';
+    //         break;
+    //     default:
+    //         checksumByte[6] = '1';
+    //         checksumByte[7] = '1';
+    //         break;
+    // }
+
+    // // BIT OPERATIONS MAGIC
+    // cc_checksum = 0;
+    // for (int i = 0; i < 8; ++i )
+    //     cc_checksum |= (checksumByte[i] == '1') << (7 - i);
+
+    // // uprintf(UART0, "--- %c\n\r", cc_checksum);
+    // opayload.checksum = cc_checksum;
+    // char checksumByteL[8];
+    // for(int j = 0 ; j < 8; j++)
+    //     checksumByteL[j] = checksumByte[j];
+
+    // memcpy(&opayload.full, &checksumByteL, sizeof(checksumByte));
+
+    memcpy((char*)&(cc_tx_data[2]), &opayload, sizeof(opayload_t));
     /* "Free" the rx buffer as soon as possible */
-    cc_ptr = 0;
+    // cc_ptr = 0;
+    // cc_bit = 2;
     /* Prepare buffer for sending */
-    cc_tx_data[0] = tx_len + 1;
+    cc_tx_data[0] = sizeof(opayload_t) + 1;
     cc_tx_data[1] = SENSORS_ADDRESS; // Change it for different receptors
     /* Send */
     if (cc1101_tx_fifo_state() != 0) {
         cc1101_flush_tx_fifo();
     }
-    ret = cc1101_send_packet(cc_tx_data, (tx_len + 2));
+    ret = cc1101_send_packet(cc_tx_data, (sizeof(opayload_t) + 2));
     if(ret < 0)
     {
         // char data[20];
@@ -440,7 +547,7 @@ int main(void)
         // For some fucking reason we won't enter handle_rf_rx_data if we don't 
         // print something here.
         // So I just print a NULL character byte.
-        uprintf(UART0, "%c", 0x00);
+        // uprintf(UART0, "%c", 0x00);
         // msleep(1000);
         if (cc_tx == 1) 
         {
