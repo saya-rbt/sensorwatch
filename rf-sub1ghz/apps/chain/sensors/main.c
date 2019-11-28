@@ -21,6 +21,11 @@
  *
  *************************************************************************** */
 
+// Fair credit where it's due: most of the code come from the examples from
+// Nathaël Pajani, I merely adapted them to fit the assignment that was given
+// to me.
+// I'm still proud of what I did, though :)
+
 #include "core/system.h"
 #include "core/systick.h"
 #include "core/pio.h"
@@ -43,8 +48,11 @@
 
 #define MODULE_VERSION   0x01
 #define MODULE_NAME "sensorwatch - Sensors display"
-#define MODULE_ADDRESS   0x1A // Arbitrary, just have it different from the receptor
-#define RECEPTOR_ADDRESS 0x16 // Receptor address - arbitrary but different as well
+// The address is arbitrary, it just has to be different from the sensors.
+// Our microcontroller had the number 26, which is 1A in hexadecimal, so that's why.
+#define MODULE_ADDRESS   0x1A 
+// Receptor address - arbitrary but different as well
+#define RECEPTOR_ADDRESS 0x16 
 
 #define SELECTED_FREQ FREQ_SEL_48MHz
 
@@ -53,27 +61,33 @@
 // we display error codes on the last line of the screen instead so we know if
 // something goes wrong and what.
 //
+// NOTE: UART can be used to display debug messages with the DEBUG flag.
+//
 // Misc errors go from 1-9
-#define ERROR_FAULT_INFO      1
+#define ERROR_FAULT_INFO	  1
 // Honestly now i wonder where this one will be displayed but let's keep it anyway
 #define ERROR_DISPLAY_FAILURE 2 
 
 // Sensors errors go from 10-29
 #define ERROR_TSL265X_CONFIG  10
-#define ERROR_TSL256X_READ    11
+#define ERROR_TSL256X_READ	11
 #define ERROR_BME280_CONFIG   20
-#define ERROR_BME280_READ     21
+#define ERROR_BME280_READ	 21
 
 // Communication errors go from 30-39
-#define ERROR_CC1101_SEND     30
+#define ERROR_CC1101_SEND	 30
 #define ERROR_CC1101_RECEIVE  31
 
 // PART ID INFO
+// This has been gotten from lpcprog.
+// The idea initially was to use UID as a salt for an encryption key,
+// but due to the lack of time, encryption couldn't be implemented in the end.
 //
 // Part ID 0x3640c02b found on line 26
 // Part ID is 0x3640c02b
 // UID: 0x0211f5f5 - 0x4e434314 - 0x00393536 - 0x54002249
 
+// Initialize the sensors values
 uint16_t uv = 0, ir = 0, humidity = 0;
 uint32_t pressure = 0, temp = 0, lux = 0;
 
@@ -108,8 +122,8 @@ const struct pio cc1101_miso_pin = LPC_SSP0_MISO_PIO_0_16;
 const struct pio cc1101_gdo0 = LPC_GPIO_0_6;
 const struct pio cc1101_gdo2 = LPC_GPIO_0_7;
 
-const struct pio temp_alert = LPC_GPIO_0_3;
-
+// We're going to be using the green and red LEDs to warn about an error
+// as well as the screen
 const struct pio status_led_green = LPC_GPIO_0_28;
 const struct pio status_led_red = LPC_GPIO_0_29;
 
@@ -140,7 +154,7 @@ void system_init()
 }
 
 
-// since we use adafruit display to display errors we need to initialize it here
+// Since we use the Adafruit screen to display errors we need to initialize it here
 
 /**************************************************************************** */
 /* Adafruit Oled Display */
@@ -165,6 +179,7 @@ struct oled_display display = {
 #define ROW(x) VERTICAL_REV(x)
 DECLARE_FONT(font);
 
+// Displays a char, mostly useless by itself, but can be used
 void display_char(uint8_t line, uint8_t col, uint8_t c)
 {
 	uint8_t tile = (c > FIRST_FONT_CHAR) ? (c - FIRST_FONT_CHAR) : 0;
@@ -172,6 +187,7 @@ void display_char(uint8_t line, uint8_t col, uint8_t c)
 	ssd130x_buffer_set_tile(gddram, col, line, tile_data);
 }
 
+// Function we'll use to display a line on the Adafruit screen, most od the time
 int display_line(uint8_t line, uint8_t col, char* text)
 {
 	int len = strlen((char*)text);
@@ -198,22 +214,6 @@ void periodic_display(uint32_t tick)
 	update_display = 1;
 }
 
-/* Define our fault handler. This one is not mandatory, the dummy fault handler
- * will be used when it's not overridden here.
- * Note : The default one does a simple infinite loop. If the watchdog is deactivated
- * the system will hang.
- */
-
-void fault_info(const char* name, uint32_t len)
-{
-	char data[20];
-	snprintf(data, 20, "ERROR: %d - %c", ERROR_FAULT_INFO, name);
-	display_line(7, 0, data);
-	gpio_clear(status_led_green);
-	gpio_set(status_led_red);
-	while (1);
-}
-
 /***************************************************************************** */
 /* Luminosity */
 
@@ -227,11 +227,14 @@ struct tsl256x_sensor_config tsl256x_sensor = {
 	.package = TSL256x_PACKAGE_T,
 };
 
+// Luminosity sensor setup
 void lux_config(int uart_num)
 {
 	int ret = 0;
 	ret = tsl256x_configure(&tsl256x_sensor);
 	if (ret != 0) {
+		// If the sensor couldn't be initialized, we warn the user
+		// by displaying a message and lighting the red led up
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_TSL265X_CONFIG, ret);
 		display_line(7, 0, data);
@@ -240,28 +243,30 @@ void lux_config(int uart_num)
 	}
 }
 
+// Reading the luminosity sensor
 void lux_display(int uart_num, uint16_t* ir, uint32_t* lux)
 {
 	uint16_t comb = 0;
 	int ret = 0;
 
 	ret = tsl256x_sensor_read(&tsl256x_sensor, &comb, ir, lux);
-	if (ret != 0) {
-		// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-		// uprintf(uart_num, "Lux read error: %d\n\r", ret);
+	if (ret != 0)
+	{
+		// Error display again
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_TSL256X_READ, ret);
 		display_line(7, 0, data);
-		// gpio_clear(status_led_orange);
 		gpio_clear(status_led_green);
 		gpio_set(status_led_red);
-	} else {
+	}
+	else
+	{
 		// If now everything works fine (e.g. we fix the problem)
 		gpio_clear(status_led_red);
 		gpio_set(status_led_green);
 		// Reset the screen error line
 		char data[20];
-		snprintf(data, 20, "                ");
+		snprintf(data, 20, "				");
 		display_line(7, 0, data);
 	}
 }
@@ -283,14 +288,14 @@ struct bme280_sensor_config bme280_sensor =
 	.filter_coeff = BME280_FILT_OFF,
 };
 
+// Humidity and temperature sensors setup
 void bme_config(int uart_num)
 {
 	int ret = 0;
 	ret = bme280_configure(&bme280_sensor);
 	if (ret != 0)
 	{
-		// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-		// uprintf(uart_num, "Sensor config error: %d\n\r", ret);
+		// Error display
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_BME280_CONFIG, ret);
 		display_line(7, 0, data);
@@ -304,20 +309,20 @@ void bme_config(int uart_num)
 		gpio_set(status_led_green);
 		// Reset the screen error line
 		char data[20];
-		snprintf(data, 20, "                ");
+		snprintf(data, 20, "				");
 		display_line(7, 0, data);
 	}
 }
 
 /* BME will obtain temperature, pressure and humidity values */
+// Pressure isn't used in our application, but it might be in the future.
 void bme_display(int uart_num, uint32_t* pressure, uint32_t* temp, uint16_t* humidity)
 {
 	int ret = 0;
 	ret = bme280_sensor_read(&bme280_sensor, pressure, temp, humidity);
 	if(ret != 0)
 	{
-		// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-		// uprintf(uart_num, "Sensor read error: %d\n\r", ret);
+		// Error display
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_BME280_READ, ret);
 		display_line(7, 0, data);
@@ -326,6 +331,7 @@ void bme_display(int uart_num, uint32_t* pressure, uint32_t* temp, uint16_t* hum
 	}
 	else
 	{
+		// Values compensation
 		int comp_temp = 0;
 		uint32_t comp_pressure = 0;
 		uint32_t comp_humidity = 0;
@@ -341,40 +347,17 @@ void bme_display(int uart_num, uint32_t* pressure, uint32_t* temp, uint16_t* hum
 		gpio_set(status_led_green);
 		// Reset the screen error line
 		char data[20];
-		snprintf(data, 20, "                ");
+		snprintf(data, 20, "				");
 		display_line(7, 0, data);
 	}
 }
 
 
-/***************************************************************************** */
-/* Communication over USB */
-// uint8_t text_received = 0;
-// #define NB_CHARS  15
-// char inbuff[NB_CHARS + 1];
-// void data_rx(uint8_t c)
-// {
-// 	static int idx = 0;
-// 	if ((c != 0) && (c != '\n') && (c != '\r')) {
-// 		inbuff[idx++] = c;
-// 		if (idx >= NB_CHARS) {
-// 			inbuff[NB_CHARS] = 0;
-// 			idx = 0;
-// 			text_received = 1;
-// 		}
-// 	} else {
-// 		if (idx != 0) {
-// 			inbuff[idx] = 0;
-// 			text_received = 1;
-// 		}
-// 		idx = 0;
-// 	}
-// }
-
 /******************************************************************************/
 /* RF Communication */
 #define RF_BUFF_LEN	64
 
+// Flag set when we receive data from the rf we have to handle
 static volatile int check_rx = 0;
 void rf_rx_calback(uint32_t gpio)
 {
@@ -402,16 +385,27 @@ void rf_config(void)
 	set_gpio_callback(rf_rx_calback, &cc1101_gdo0, EDGE_RISING);
 	cc1101_set_address(MODULE_ADDRESS);
 
-// #ifdef DEBUG
-// 	// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-// 	uprintf(UART0, "CC1101 RF link init done.\n\r");
-// #endif
+#ifdef DEBUG
+	uprintf(UART0, "CC1101 RF link init done.\n\r");
+#endif
 }
 
+// These three variables will be used to remember the order in which temperature,
+// humidity and luminosity will be displayed on the screen.
 static volatile uint8_t tmppos = 0;
 static volatile uint8_t luxpos = 1;
 static volatile uint8_t hmdpos = 2;
 
+/* Payload types
+ *
+ * In order to send and receive data, whether it is values from the sensors
+ * or an order change request to the sensors' display, we encapsulate it
+ * in a struct to make it easier to handle.
+ *
+ */
+
+// Packets containing values gathered from the sensors go here to be sent to the
+// receptor (gateway to the Pi)
 typedef struct vpayload_t
 {
 	char source;
@@ -421,18 +415,19 @@ typedef struct vpayload_t
 	uint32_t lux;
 } vpayload_t;
 
+// Packets gathered from rf containing the values' order in which to display them
 typedef struct opayload_t
 {
-    char source;
-    // char checksum;
-    char first;
-    char second;
-    char third;
-    // char full[8];
+	char source;
+	char first;
+	char second;
+	char third;
 } opayload_t;
 
+// This will be used to store data from the sensors before sending it through rf
 static volatile vpayload_t cc_tx_vpayload;
 
+// Function called when data comes from the radio
 void handle_rf_rx_data(void)
 {
 	uint8_t data[RF_BUFF_LEN];
@@ -443,6 +438,7 @@ void handle_rf_rx_data(void)
 	ret = cc1101_receive_packet(data, RF_BUFF_LEN, &status);
 	if(ret < 0)
 	{
+		// Error display
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_RECEIVE, ret);
 		display_line(7, 0, data);
@@ -452,189 +448,75 @@ void handle_rf_rx_data(void)
 	/* Go back to RX mode */
 	cc1101_enter_rx_mode();
 
-// #ifdef DEBUG
-// 	// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-// 	uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
-// #endif
+#ifdef DEBUG
+	uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
+#endif
 
+	// Storing the order locally so we don't mess up with volatile variables
 	opayload_t rec_order_payload;
 
-	// uprintf(UART0, "a\n\r");
+	// Address verification
 	if(data[1] == MODULE_ADDRESS)
 	{
+		// We use the led to signal we're handling the data.
+        // However, it barely blinks so it's barely noticeable, but still.
 		gpio_clear(status_led_green);
-        gpio_set(status_led_red);
+		gpio_set(status_led_red);
 
-        uprintf(UART0, "\n\rdata v:%x %x %x\n\r", data[3], data[4], data[5]);
-        memcpy(&rec_order_payload, &data[2], sizeof(opayload_t));
-        uprintf(UART0, "data all:%x %x %x %x\n\r", 
-        	rec_order_payload.source, 
-        	// rec_order_payload.checksum, 
-        	rec_order_payload.first,
-        	rec_order_payload.second,
-        	rec_order_payload.third);
-        // uprintf(UART0, "full:%s\n\r", rec_order_payload.full);
-
-		// char checksumByte[8];
-		// snprintf(rec_order_payload.full, sizeof(rec_order_payload.full), "%c%c%c%c%c%c%c%c",
-		// 	(rec_order_payload.checksum&0x80)?'1':'0',
-		// 	(rec_order_payload.checksum&0x40)?'1':'0',
-		// 	(rec_order_payload.checksum&0x20)?'1':'0',
-		// 	(rec_order_payload.checksum&0x10)?'1':'0',
-		// 	(rec_order_payload.checksum&0x08)?'1':'0',
-		// 	(rec_order_payload.checksum&0x04)?'1':'0',
-		// 	(rec_order_payload.checksum&0x02)?'1':'0',
-		// 	(rec_order_payload.checksum&0x01)?'1':'0'
-		// );
-		// checksumByte[0] = '0';
-		// checksumByte[1] = '1';
-		// checksumByte[2] = '0';
-		// checksumByte[3] = '0';
-		// checksumByte[4] = '1';
-		// checksumByte[5] = '0';
-		// checksumByte[6] = '0';
-		// checksumByte[7] = '1';
-
-		// If the packet has the correct header and all
-		// letters are different (ie. we don't ask for the same value twice),
-		// we handle the packet
-		// uprintf(UART0, "struct:%s %x\n\r", checksumByte, rec_order_payload.checksum);
-		uprintf(UART0, "st values:%x %x %x\n\r", rec_order_payload.first,
-			rec_order_payload.second,
-			rec_order_payload.third);
-		if(/*(checksumByte[0] == '0') && (checksumByte[1] == '1') && */
-			(
-				(rec_order_payload.first != rec_order_payload.second) &&
-				(rec_order_payload.second != rec_order_payload.third) &&
-				(rec_order_payload.third != rec_order_payload.first)
-			) && data[1] == MODULE_ADDRESS
+		// Copying the received packet in our struct so we can handle it better
+		memcpy(&rec_order_payload, &data[2], sizeof(opayload_t));
+		
+		// If someone asks for the same value twice, we refuse.
+		// The user doesn't make the rules, we do. :)
+		if((rec_order_payload.first != rec_order_payload.second) &&
+			(rec_order_payload.second != rec_order_payload.third) &&
+			(rec_order_payload.third != rec_order_payload.first)
 		)
 		{
-			uprintf(UART0, "source ok\n\r");
-			// int j = 2;
-			// for(int i = 4; i <= 6; i++)
-			// {
-			// 	uprintf(UART0,"%c%c%c\n\r", data[i], data[i], data[i]);
-			// 	switch(data[i])
-			// 	{
-			// 		case 'T':
-			// 			if((checksumByte[j] == 0) && (checksumByte[j+1] == 0))
-			// 			{
-			// 				tmppos = i-4;
-			// 				break;
-			// 			}
-			// 			else return;
-			// 		case 'L':
-			// 			if((checksumByte[j] == 0) && (checksumByte[j+1] == 1))
-			// 			{
-			// 				luxpos = i-4;
-			// 				break;
-			// 			}
-			// 			else return;
-			// 		case 'H':
-			// 			if((checksumByte[j] == 1) && (checksumByte[j+1] == 0))
-			// 			{
-			// 				hmdpos = i-4;
-			// 				break;
-			// 			}
-			// 			else return;
-			// 		default:
-			// 			return;
-			// 	}
-			// 	j = j + 2;
-			// }
-
-			uprintf(UART0, "%x %x %x\n\r", rec_order_payload.first, rec_order_payload.second, rec_order_payload.third);
-			// uprintf(UART0, "%s\n\r", data);
+			// So this is really ugly, but it's the best way I found.
 			switch(rec_order_payload.first)
 			{
 				case 'T':
-					uprintf(UART0,"1t\n\r");
-					// if((checksumByte[2] == '0') && (checksumByte[3] == '0'))
-					// {
-					// 	uprintf(UART0, "00\n\r");
-						tmppos = 0;
-						break;
-					// }
+					tmppos = 0;
+					break;
 				case 'L':
-					uprintf(UART0,"1l\n\r");
-					// if((checksumByte[2] == '0') && (checksumByte[3] == '1'))
-					// {
-					// 	uprintf(UART0, "01\n\r");
-						luxpos = 0;
-						break;
-					// }
+					luxpos = 0;
+					break;
 				case 'H':
-					uprintf(UART0,"1h\n\r");
-					// if((checksumByte[2] == '1') && (checksumByte[3] == '0'))
-					// {
-					// 	uprintf(UART0, "10\n\r");
-						hmdpos = 0;
-						break;
-					// }
+					hmdpos = 0;
+					break;
 			}
 
 			switch(rec_order_payload.second)
 			{
 				case 'T':
-					uprintf(UART0,"2t\n\r");
-					// if((checksumByte[4] == '0') && (checksumByte[5] == '0'))
-					// {
-					// 	uprintf(UART0, "00\n\r");
-						tmppos = 1;
-						break;
-					// }
+					tmppos = 1;
+					break;
 				case 'L':
-					uprintf(UART0,"2l\n\r");
-					// if((checksumByte[4] == '0') && (checksumByte[5] == '1'))
-					// {
-					// 	uprintf(UART0, "01\n\r");
-						luxpos = 1;
-						break;
-					// }
+					luxpos = 1;
+					break;
 				case 'H':
-					uprintf(UART0,"2h\n\r");
-					// if((checksumByte[4] == '1') && (checksumByte[5] == '0'))
-					// {
-					// 	uprintf(UART0, "10\n\r");
-						hmdpos = 1;
-						break;
-					// }
+					hmdpos = 1;
+					break;
 			}
 
 			switch(rec_order_payload.third)
 			{
 				case 'T':
-					uprintf(UART0,"3t\n\r");
-					// if((checksumByte[6] == '0') && (checksumByte[7] == '0'))
-					// {
-					// 	uprintf(UART0, "00\n\r");
-						tmppos = 2;
-						break;
-					// }
+					tmppos = 2;
+					break;
 				case 'L':
-					uprintf(UART0,"3l\n\r");
-					// if((checksumByte[6] == '0') && (checksumByte[7] == '1'))
-					// {
-					// 	uprintf(UART0, "01\n\r");
-						luxpos = 2;
-						break;
-					// }
+					luxpos = 2;
+					break;
 				case 'H':
-					uprintf(UART0,"3h\n\r");
-					// if((checksumByte[6] == '1') && (checksumByte[7] == '0'))
-					// {
-					// 	uprintf(UART0, "10\n\r");
-						hmdpos = 2;
-						break;
-					// }
+					hmdpos = 2;
+					break;
 			}
-			uprintf(UART0, "%d%d%d\n\r", tmppos, luxpos, hmdpos);
 		}
 		// We don't change the order if the packet is invalid
 		else return;
-        gpio_clear(status_led_red);
-        gpio_set(status_led_green);
+		gpio_clear(status_led_red);
+		gpio_set(status_led_green);
 	}
 }
 
@@ -647,29 +529,10 @@ static volatile uint32_t cc_tx = 0;
 static volatile uint8_t cc_tx_buff[RF_BUFF_LEN];
 static volatile uint8_t cc_ptr = 0;
 static volatile unsigned char cc_checksum = 0;
+
+// Deprecated, since the microcontroller doesn't receive data from the UART anymore
 void handle_uart_cmd(uint8_t c)
 {
-	// TODO IN THE RECEPTOR: since we will recieve changeFormat()
-	// through the RPi (USB, so UART0), we need to handle it differently.
-	// An example is if(c == "T" || c == "L" || c == "H") we call a different
-	// function, that will send it to the sensors microcontroller,
-	// otherwise it will just send it to the Pi and return.
-	// This is not for this code but otherwise i'll forget about it.
-
-// #ifdef DEBUG
-// 	// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-	// char data[20];
-	// snprintf(data, 20, "ERROR: f");
-	// display_line(7, 0, data);
-	// uprintf(UART0, "Received command : %c, buffer size: %d.\n\r",c,cc_ptr);
-// #endif
-	// Source address
-	// cc_tx_buff[0] = MODULE_ADDRESS;
-
-	// Data
-	// Most of the data is handled in the main loop, so we just use it as it is
-	// passed here
-	// cc_tx_buff[1] = cc_checksum;
 	if (cc_ptr < RF_BUFF_LEN) {
 		cc_tx_buff[cc_ptr++] = c;
 	} else {
@@ -682,6 +545,7 @@ void handle_uart_cmd(uint8_t c)
 	}
 }
 
+// Sending data on the radio
 void send_on_rf(void)
 {
 	uint8_t cc_tx_data[RF_BUFF_LEN + 2];
@@ -695,35 +559,36 @@ void send_on_rf(void)
 	vpayload.tmp = cc_tx_vpayload.tmp;
 	vpayload.lux = cc_tx_vpayload.lux;
 	vpayload.hmd = cc_tx_vpayload.hmd;
+
+	// Copy our structure into the packet we're going to send
 	memcpy((char*)&(cc_tx_data[2]), &vpayload, sizeof(vpayload_t));
 	/* "Free" the rx buffer as soon as possible */
 	cc_ptr = 0;
 	/* Prepare buffer for sending */
+	// Length
 	cc_tx_data[0] = tx_len + 1;
+	// Destination address
 	cc_tx_data[1] = RECEPTOR_ADDRESS; // Change it for different receptors
+
 	/* Send */
 	if (cc1101_tx_fifo_state() != 0) {
 		cc1101_flush_tx_fifo();
 	}
-	// uprintf(UART0, "%x %x %x %x\n\r", cc_tx_data[0], cc_tx_data[1], cc_tx_data[2], cc_tx_data[3]);
+
 	ret = cc1101_send_packet(cc_tx_data, (tx_len + 2));
 	if(ret < 0)
 	{
+		// Error display
 		char data[20];
 		snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_SEND, ret);
 		display_line(7, 0, data);
 		gpio_clear(status_led_green);
 		gpio_set(status_led_red);
 	}
-	// else
-	// {
-	// 	uprintf(UART0, "connard");
-	// }
 
-// #ifdef DEBUG
-// 	// TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-	// uprintf(UART0, "Tx ret: %d\n\r", ret);
-// #endif
+#ifdef DEBUG
+	uprintf(UART0, "Tx ret: %d\n\r", ret);
+#endif
 }
 
 /**************************************************************************** */
@@ -762,9 +627,6 @@ int main(void)
 	{
 		uint8_t status = 0;
 
-		/* Alive notice*/
-		// chenillard(250);
-
 		/* Read the sensors */
 		bme_display(UART0, &pressure, &temp, &humidity);
 		lux_display(UART0, &ir, &lux);
@@ -780,7 +642,10 @@ int main(void)
 				biglux = 1;
 			else
 				biglux = 0;
+
+			// Preparing what we want to display
 			snprintf(data, 20, "TMP: %d.%d	dC", temp/10, temp%10);
+			// ... and displaying it.
 			display_line(tmppos, 0, data);
 			if(biglux)
 				snprintf(data, 20, "LUX: %d.0 klx", (lux/1000)/*, (lux/1000)%10*/);
@@ -794,11 +659,11 @@ int main(void)
 			ret = ssd130x_display_full_screen(&display);
 			if(ret < 0)
 			{
-				// uprintf(UART0, "Display update error: %d\n\r", ret);
+				// In case the screen fails, we display it on... the screen.
+				// That aside, we also set the red led, so it's not totally stupid.
 				char data[20];
 				snprintf(data, 20, "ERROR: %d - %d", ERROR_DISPLAY_FAILURE, ret);
 				display_line(7, 0, data);
-				// gpio_clear(status_led_orange);
 				gpio_clear(status_led_green);
 				gpio_set(status_led_red);
 			}
@@ -809,7 +674,7 @@ int main(void)
 				gpio_set(status_led_green);
 				// Reset the screen error line
 				char data[20];
-				snprintf(data, 20, "                ");
+				snprintf(data, 20, "				");
 				display_line(7, 0, data);
 			}
 			update_display = 0;
@@ -821,14 +686,12 @@ int main(void)
 		// The first 2 bits are for the type of message: 00 for values, 01 for 
 		// format change request, 10 and 11 for keys exchange (not available)
 		// Since the sensors will only send values, it is always 00.
-		// We have 2 bits so that we can add different types in the future if
-		// we want to make our protocol evolve :)
 		char checksumByte[8];
 		checksumByte[0] = '0';
 		checksumByte[1] = '0';
 
 		// For parity bit and division checksum calculation
-		// This is super long and there's probably an easier way to do it,
+		// This is super long, ugly and there's probably an easier way to do it,
 		// but I don't really have the time by now, unfortunately
 		//
 		// Temperature
@@ -906,21 +769,13 @@ int main(void)
 			cc_checksum |= (checksumByte[i] == '1') << (7 - i);
 
 		/* RF */
-		// Buffering data into the UART0 before sending it
-		// It will then be handled by handle_uart_cmd
-		// char payload[25];
-		// snprintf(payload, 25, "%c%c%d.%d;%d.0;%d.%d",
-		// 	MODULE_ADDRESS, cc_checksum,
-		// 	temp/10, temp%10,
-		// 	lux,
-		// 	humidity/10, humidity%10);
-
 		cc_tx_vpayload.source = MODULE_ADDRESS;
 		cc_tx_vpayload.checksum = cc_checksum;
 		cc_tx_vpayload.tmp = temp;
 		cc_tx_vpayload.lux = lux;
 		cc_tx_vpayload.hmd = humidity;
 
+		// We set the "please send me" flag
 		cc_tx = 1;
 
 		if (cc_tx == 1) 
@@ -954,6 +809,8 @@ int main(void)
 			handle_rf_rx_data();
 			check_rx = 0;
 		}
+		
+		// We add a delay not to flood the frequency and also the receptors
 		msleep(1000);
 	}
 	return 0;

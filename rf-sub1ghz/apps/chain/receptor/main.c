@@ -21,6 +21,11 @@
  *
  *************************************************************************** */
 
+// Fair credit where it's due: most of the code come from the examples from
+// Nathaël Pajani, I merely adapted them to fit the assignment that was given
+// to me.
+// I'm still proud of what I did, though :)
+
 #include "core/system.h"
 #include "core/systick.h"
 #include "core/pio.h"
@@ -43,8 +48,11 @@
 
 #define MODULE_VERSION  0x01
 #define MODULE_NAME "sensorwatch - Receptor microcontroller"
-#define MODULE_ADDRESS  0x16 // Arbitrary, just have it different from the snesors
-#define SENSORS_ADDRESS 0x1A // Receptor address - arbitrary but different as well
+// The address is arbitrary, it just has to be different from the sensors.
+// Our microcontroller had the number 22, which is 16 in hexadecimal, so that's why.
+#define MODULE_ADDRESS  0x16 
+// Sensors' microcontroller address - arbitrary but different as well
+#define SENSORS_ADDRESS 0x1A 
 
 #define SELECTED_FREQ FREQ_SEL_48MHz
 
@@ -54,30 +62,31 @@
 // something goes wrong and what.
 //
 // Misc errors go from 1-9
-#define ERROR_FAULT_INFO      1
+#define ERROR_FAULT_INFO	  1
 // Honestly now i wonder where this one will be displayed but let's keep it anyway
 #define ERROR_DISPLAY_FAILURE 2 
 
 // Sensors errors go from 10-29
 // We don't use these here but we do on the other microcontroller
 #define ERROR_TSL265X_CONFIG  10
-#define ERROR_TSL256X_READ    11
+#define ERROR_TSL256X_READ	11
 #define ERROR_BME280_CONFIG   20
-#define ERROR_BME280_READ     21
+#define ERROR_BME280_READ	 21
 
 // Communication errors go from 30-39
-#define ERROR_CC1101_SEND     30
+#define ERROR_CC1101_SEND	 30
 #define ERROR_CC1101_RECEIVE  31
 
 // PART ID INFO
+// This has been gotten from lpcprog.
+// The idea initially was to use UID as a salt for an encryption key,
+// but due to the lack of time, encryption couldn't be implemented in the end.
 //
 // Part ID 0x3640c02b found on line 26
 // Part ID is 0x3640c02b
 // UID: 0x0214f5f5 - 0x4e434314 - 0x09393536 - 0x54001e3e
 
-uint16_t uv = 0, ir = 0, humidity = 0;
-uint32_t pressure = 0, temp = 0, lux = 0;
-
+// Display flag: set to 1 when we need to update the Adafruit screen display
 static volatile uint32_t update_display = 0;
 
 /***************************************************************************** */
@@ -87,21 +96,21 @@ static volatile uint32_t update_display = 0;
  * All pins blocks may be safelly merged in a single block for single set_pins() call..
  */
 const struct pio_config common_pins[] = {
-    /* UART 0 */
-    { LPC_UART0_RX_PIO_0_1,  LPC_IO_DIGITAL },
-    { LPC_UART0_TX_PIO_0_2,  LPC_IO_DIGITAL },
-    /* I2C 0 */
-    { LPC_I2C0_SCL_PIO_0_10, (LPC_IO_DIGITAL | LPC_IO_OPEN_DRAIN_ENABLE) },
-    { LPC_I2C0_SDA_PIO_0_11, (LPC_IO_DIGITAL | LPC_IO_OPEN_DRAIN_ENABLE) },
-    /* SPI */
-    { LPC_SSP0_SCLK_PIO_0_14, LPC_IO_DIGITAL },
-    { LPC_SSP0_MOSI_PIO_0_17, LPC_IO_DIGITAL },
-    { LPC_SSP0_MISO_PIO_0_16, LPC_IO_DIGITAL },
-    /* ADC */
-    { LPC_ADC_AD0_PIO_0_30, LPC_IO_ANALOG },
-    { LPC_ADC_AD1_PIO_0_31, LPC_IO_ANALOG },
-    { LPC_ADC_AD2_PIO_1_0,  LPC_IO_ANALOG },
-    ARRAY_LAST_PIO,
+	/* UART 0 */
+	{ LPC_UART0_RX_PIO_0_1,  LPC_IO_DIGITAL },
+	{ LPC_UART0_TX_PIO_0_2,  LPC_IO_DIGITAL },
+	/* I2C 0 */
+	{ LPC_I2C0_SCL_PIO_0_10, (LPC_IO_DIGITAL | LPC_IO_OPEN_DRAIN_ENABLE) },
+	{ LPC_I2C0_SDA_PIO_0_11, (LPC_IO_DIGITAL | LPC_IO_OPEN_DRAIN_ENABLE) },
+	/* SPI */
+	{ LPC_SSP0_SCLK_PIO_0_14, LPC_IO_DIGITAL },
+	{ LPC_SSP0_MOSI_PIO_0_17, LPC_IO_DIGITAL },
+	{ LPC_SSP0_MISO_PIO_0_16, LPC_IO_DIGITAL },
+	/* ADC */
+	{ LPC_ADC_AD0_PIO_0_30, LPC_IO_ANALOG },
+	{ LPC_ADC_AD1_PIO_0_31, LPC_IO_ANALOG },
+	{ LPC_ADC_AD2_PIO_1_0,  LPC_IO_ANALOG },
+	ARRAY_LAST_PIO,
 };
 
 const struct pio cc1101_cs_pin = LPC_GPIO_0_15;
@@ -109,10 +118,9 @@ const struct pio cc1101_miso_pin = LPC_SSP0_MISO_PIO_0_16;
 const struct pio cc1101_gdo0 = LPC_GPIO_0_6;
 const struct pio cc1101_gdo2 = LPC_GPIO_0_7;
 
-// const struct pio temp_alert = LPC_GPIO_0_3;
-
+// We're going to be using the green and red LEDs to warn about an error
+// instead of UART0, since it will be use to transfer data.
 const struct pio status_led_green = LPC_GPIO_0_28;
-// const struct pio status_led_orange = LPC_GPIO_0_10;
 const struct pio status_led_red = LPC_GPIO_0_29;
 
 const struct pio button = LPC_GPIO_0_12; // ISP button
@@ -123,71 +131,22 @@ const struct pio button = LPC_GPIO_0_12; // ISP button
 
 void system_init()
 {
-    /* Stop the Watchdog */
-    startup_watchdog_disable(); /* Do it right now, before it gets a chance to break in */
-    system_set_default_power_state();
-    clock_config(SELECTED_FREQ);
-    set_pins(common_pins);
-    gpio_on();
-    status_led_config(&status_led_green, &status_led_red);
+	/* Stop the Watchdog */
+	startup_watchdog_disable(); /* Do it right now, before it gets a chance to break in */
+	system_set_default_power_state();
+	clock_config(SELECTED_FREQ);
+	set_pins(common_pins);
+	gpio_on();
+	status_led_config(&status_led_green, &status_led_red);
 
-    /* System tick timer MUST be configured and running in order to use the sleeping
-     * functions */
-    systick_timer_on(1); /* 1ms */
-    systick_start();
+	/* System tick timer MUST be configured and running in order to use the sleeping
+	 * functions */
+	systick_timer_on(1); /* 1ms */
+	systick_start();
 
-    // // Clearing the LEDs
-    gpio_clear(status_led_red);
-    // gpio_clear(status_led_orange);
-    gpio_clear(status_led_green);
-
-    // // We use the orange LED to warn that we're booting
-    // gpio_set(status_led_orange);
-}
-
-
-/* Define our fault handler. This one is not mandatory, the dummy fault handler
- * will be used when it's not overridden here.
- * Note : The default one does a simple infinite loop. If the watchdog is deactivated
- * the system will hang.
- */
-
-// void fault_info(const char* name, uint32_t len)
-// {
-//  // TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-//  // uprintf(UART0, name);
-//  char data[20];
-//  snprintf(data, 20, "ERROR: %d - %c", ERROR_FAULT_INFO, name);
-//  display_line(7, 0, data);
-//  // gpio_clear(status_led_orange);
-//  gpio_clear(status_led_green);
-//  gpio_set(status_led_red);
-//  while (1);
-// }
-
-
-/***************************************************************************** */
-/* Communication over USB */
-uint8_t text_received = 0;
-#define NB_CHARS  15
-char inbuff[NB_CHARS + 1];
-void data_rx(uint8_t c)
-{
-    static int idx = 0;
-    if ((c != 0) && (c != '\n') && (c != '\r')) {
-        inbuff[idx++] = c;
-        if (idx >= NB_CHARS) {
-            inbuff[NB_CHARS] = 0;
-            idx = 0;
-            text_received = 1;
-        }
-    } else {
-        if (idx != 0) {
-            inbuff[idx] = 0;
-            text_received = 1;
-        }
-        idx = 0;
-    }
+	// Clearing the LEDs
+	gpio_clear(status_led_red);
+	gpio_clear(status_led_green);
 }
 
 /******************************************************************************/
@@ -197,126 +156,120 @@ void data_rx(uint8_t c)
 static volatile int check_rx = 0;
 void rf_rx_calback(uint32_t gpio)
 {
-    // uprintf(UART0, "fe");
-    check_rx = 1;
+	check_rx = 1;
 }
 
 static uint8_t rf_specific_settings[] = {
-    CC1101_REGS(gdo_config[2]), 0x07, /* GDO_0 - Assert on CRC OK | Disable temp sensor */
-    CC1101_REGS(gdo_config[0]), 0x2E, /* GDO_2 - FIXME : do something usefull with it for tests */
-    CC1101_REGS(pkt_ctrl[0]), 0x0F, /* Accept all sync, CRC err auto flush, Append, Addr check and Bcast */
+	CC1101_REGS(gdo_config[2]), 0x07, /* GDO_0 - Assert on CRC OK | Disable temp sensor */
+	CC1101_REGS(gdo_config[0]), 0x2E, /* GDO_2 - FIXME : do something usefull with it for tests */
+	CC1101_REGS(pkt_ctrl[0]), 0x0F, /* Accept all sync, CRC err auto flush, Append, Addr check and Bcast */
 #if (RF_915MHz == 1)
-    /* FIXME : Add here a define protected list of settings for 915MHz configuration */
+	/* FIXME : Add here a define protected list of settings for 915MHz configuration */
 #endif
 };
 
 /* RF config */
 void rf_config(void)
 {
-    config_gpio(&cc1101_gdo0, LPC_IO_MODE_PULL_UP, GPIO_DIR_IN, 0);
-    cc1101_init(0, &cc1101_cs_pin, &cc1101_miso_pin); /* ssp_num, cs_pin, miso_pin */
-    /* Set default config */
-    cc1101_config();
-    /* And change application specific settings */
-    cc1101_update_config(rf_specific_settings, sizeof(rf_specific_settings));
-    set_gpio_callback(rf_rx_calback, &cc1101_gdo0, EDGE_RISING);
-    cc1101_set_address(MODULE_ADDRESS);
+	config_gpio(&cc1101_gdo0, LPC_IO_MODE_PULL_UP, GPIO_DIR_IN, 0);
+	cc1101_init(0, &cc1101_cs_pin, &cc1101_miso_pin); /* ssp_num, cs_pin, miso_pin */
+	/* Set default config */
+	cc1101_config();
+	/* And change application specific settings */
+	cc1101_update_config(rf_specific_settings, sizeof(rf_specific_settings));
+	set_gpio_callback(rf_rx_calback, &cc1101_gdo0, EDGE_RISING);
+	cc1101_set_address(MODULE_ADDRESS);
 
-// #ifdef DEBUG
-//  // TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-//  uprintf(UART0, "CC1101 RF link init done.\n\r");
-// #endif
+#ifdef DEBUG
+	uprintf(UART0, "CC1101 RF link init done.\n\r");
+#endif
 }
 
+/* Payload types
+ *
+ * In order to send and receive data, whether it is values from the sensors
+ * or an order change request to the sensors' display, we encapsulate it
+ * in a struct to make it easier to handle.
+ *
+ */
+
+// Packets containing values received from the sensors go here
 typedef struct vpayload_t
 {
-    char source;
-    char checksum;
-    uint32_t tmp;
-    uint16_t hmd;
-    uint32_t lux;
+	char source;
+	char checksum;
+	uint32_t tmp;
+	uint16_t hmd;
+	uint32_t lux;
 } vpayload_t;
 
+// Packets containing the order we're sending the sensors' microcontroller go here
 typedef struct opayload_t
 {
-    char source;
-    // char checksum;
-    char first;
-    char second;
-    char third;
-    // char full[8];
+	char source;
+	char first;
+	char second;
+	char third;
 } opayload_t;
 
+// This will be used to transfer data from where we got it (rf) to the USB (UART0)
 static volatile vpayload_t cc_tx_vpayload;
 
+// Function called when data comes from the radio
 void handle_rf_rx_data(void)
 {
-    uint8_t data[RF_BUFF_LEN];
-    // int8_t ret = 0;
-    uint8_t status = 0;
+	uint8_t data[RF_BUFF_LEN];
+	uint8_t status = 0;
 
-    /* Check for received packet (and get it if any) */
-    cc1101_receive_packet(data, RF_BUFF_LEN, &status);
-    // ret = cc1101_receive_packet(data, RF_BUFF_LEN, &status);
-    // if(ret != 0)
-    // {
-    //     // char data[20];
-    //     // snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_RECEIVE, ret);
-    //     // display_line(7, 0, data);
-    //     gpio_clear(status_led_green);
-    //     gpio_set(status_led_red);
-    // }
-    /* Go back to RX mode */
-    cc1101_enter_rx_mode();
+	/* Check for received packet (and get it if any) */
+	cc1101_receive_packet(data, RF_BUFF_LEN, &status);
+	
+	/* Go back to RX mode */
+	cc1101_enter_rx_mode();
 
-// #ifdef DEBUG
-//  // TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-//  uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
-// #endif
+#ifdef DEBUG
+    uprintf(UART0, "RF: ret:%d, st: %d.\n\r", ret, status);
+#endif
 
-    vpayload_t received_payload;
+    // We instantate it locally so we don't mess up with volatile data (yet :))
+	vpayload_t received_payload;
 
-    // uprintf(UART0, "FIOUZHGIUE");
+    // Address verification
+	if(data[1] == MODULE_ADDRESS)
+	{
+        // We use the led to signal we're handling the data.
+        // However, it barely blinks so it's barely noticeable, but still.
+		gpio_clear(status_led_green);
+		gpio_set(status_led_red);
 
-    if(data[1] == MODULE_ADDRESS)
-    {
-        gpio_clear(status_led_green);
-        gpio_set(status_led_red);
-        // int len = data[0];
-        // int j = 0;
-        // char values[len];
-        memcpy(&received_payload, &data[2], sizeof(vpayload_t));
-        // for(int i = 4; i <= len; i++)
-        // {
-        //     values[j] = data[i];
-        //     j++;
-        // }
+        // Copy the received data in our own struct so we can handle it better
+		memcpy(&received_payload, &data[2], sizeof(vpayload_t));
+		
+        // I couldn't manage to handle checksum verification in time,
+        // so this is merely a relic from it, unfortunately.
+		char checksumByte[8];
+		snprintf(checksumByte, sizeof(checksumByte), "%c%c%c%c%c%c%c%c",
+			(received_payload.checksum&0x80)?'1':'0',
+			(received_payload.checksum&0x40)?'1':'0',
+			(received_payload.checksum&0x20)?'1':'0',
+			(received_payload.checksum&0x10)?'1':'0',
+			(received_payload.checksum&0x08)?'1':'0',
+			(received_payload.checksum&0x04)?'1':'0',
+			(received_payload.checksum&0x02)?'1':'0',
+			(received_payload.checksum&0x01)?'1':'0'
+		);
 
-        // TODO : finish checksum
-        
-        char checksumByte[8];
-        snprintf(checksumByte, sizeof(checksumByte), "%c%c%c%c%c%c%c%c",
-            // (data[3]&0x80)?'1':'0',
-            (received_payload.checksum&0x80)?'1':'0',
-            (received_payload.checksum&0x40)?'1':'0',
-            (received_payload.checksum&0x20)?'1':'0',
-            (received_payload.checksum&0x10)?'1':'0',
-            (received_payload.checksum&0x08)?'1':'0',
-            (received_payload.checksum&0x04)?'1':'0',
-            (received_payload.checksum&0x02)?'1':'0',
-            (received_payload.checksum&0x01)?'1':'0'
-        );
+        // Sending our sensors values on the USB, which will then
+        // be handled on the Raspberry Pi and then to the app.
+		uprintf(UART0, "%d.%d;%d.0;%d.%d;", 
+			received_payload.tmp/10, received_payload.tmp%10,
+			received_payload.lux,
+			received_payload.hmd/10, received_payload.hmd%10);
 
-        // uprintf(UART0, "%x %x\n\r", received_payload.source, received_payload.checksum);
-        uprintf(UART0, "%d.%d;%d.0;%d.%d;", 
-            received_payload.tmp/10, received_payload.tmp%10,
-            received_payload.lux,
-            received_payload.hmd/10, received_payload.hmd%10);
-        // msleep(1000);
-        // uprintf(UART0, "\n\r");
-        gpio_clear(status_led_red);
-        gpio_set(status_led_green);
-    }       
+        // We're done handling the data, so we're resetting the LEDs.
+		gpio_clear(status_led_red);
+		gpio_set(status_led_green);
+	}	   
 }
 
 
@@ -326,263 +279,133 @@ void handle_rf_rx_data(void)
  * cc_ptr rewind to 0 may be lost. */
 static volatile uint32_t cc_tx = 0;
 static volatile uint8_t cc_tx_buff[RF_BUFF_LEN];
-static volatile uint8_t cc_ptr = 0; // We start at 2 because 0 is the source
-// static volatile uint8_t cc_bit = 2;
+static volatile uint8_t cc_ptr = 0;
 static volatile unsigned char cc_checksum = 0;
-// static volatile char checksumByte[8];
 void handle_uart_cmd(uint8_t c)
 {
-// #ifdef DEBUG
-//  // TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-//  uprintf(UART0, "Received command : %c, buffer size: %d.\n\r",c,cc_ptr);
-// #endif
+#ifdef DEBUG
+    uprintf(UART0, "Received command : %c, buffer size: %d.\n\r",c,cc_ptr);
+#endif
 
-    // Data
-    // Most of the data is handled in the main loop, so we just use it as it is
-    // passed here
+	// Data
+	// Most of the data is handled in the main loop, so we just use it as it is
+	// passed here
+	if (cc_ptr < RF_BUFF_LEN)
+	{
+		cc_tx_buff[cc_ptr++] = c;
+	} else {
+		// Reset the pointer
+		cc_ptr = 0;
+	}
+	if ((c == '\n') || (c == '\r') || (cc_ptr>=3)) {
+        // Using the leds again to signal we're ready to send
+		gpio_clear(status_led_green);
+		gpio_set(status_led_red);
 
-    // char checksumByte[8];
+        // Setting the "please send me" flag
+		cc_tx = 1;
 
-    // if(c == 'T')
-    // {
-    //     checksumByte[cc_bit] = '0';
-    //     checksumByte[cc_bit+1] = '0';
-    // }
-    // else if(c == 'L')
-    // {
-    //     checksumByte[cc_bit] = '0';
-    //     checksumByte[cc_bit+1] = '1';
-    // }
-    // else if(c == 'H')
-    // {
-    //     checksumByte[cc_bit] = '1';
-    //     checksumByte[cc_bit+1] = '0';
-    // }
-    // else
-    // {
-    //     checksumByte[cc_bit] = '1';
-    //     checksumByte[cc_bit+1] = '1';
-    // }
+        // Resetting the pointer
+		cc_ptr = 0;
 
-    // cc_bit = cc_bit + 2;
-
-    // BIT OPERATIONS MAGIC
-    // cc_checksum = 0;
-    // for (int i = 0; i < 8; ++i )
-    //     cc_checksum |= (checksumByte[i] == '1') << (7 - i);
-
-    // // uprintf(UART0, "--- %c\n\r", cc_checksum);
-    // cc_tx_buff[1] = cc_checksum;
-
-    // msleep(1000);
-    if (cc_ptr < RF_BUFF_LEN)
-    {
-        cc_tx_buff[cc_ptr++] = c;
-    } else {
-        // Reset the pointer
-        cc_ptr = 0;
-        // cc_bit = 2;
-    }
-    if ((c == '\n') || (c == '\r') || (cc_ptr>=3)) {
-        // uprintf(UART0, "done!");
-        gpio_clear(status_led_green);
-        gpio_set(status_led_red);
-        // msleep(100);
-        cc_tx = 1;
-        cc_ptr = 0;
-        gpio_clear(status_led_red);
-        gpio_set(status_led_green);
-    }
-    // uprintf(UART0, "%x ", c);
+        // Resetting the leds
+		gpio_clear(status_led_red);
+		gpio_set(status_led_green);
+	}
 }
 
 void send_on_rf(void)
 {
-    uint8_t cc_tx_data[sizeof(opayload_t) + 2];
-    // uint8_t tx_len = sizeof(opayload_t);
-    int ret = 0;
-    opayload_t opayload;
+	uint8_t cc_tx_data[sizeof(opayload_t) + 2];
+	int ret = 0;
+	opayload_t opayload;
 
-    /* Create a local copy */
-    // Source address
-    opayload.source = MODULE_ADDRESS;
-    opayload.first = cc_tx_buff[0];
-    opayload.second = cc_tx_buff[1];
-    opayload.third = cc_tx_buff[2];
+	/* Create a local copy */
+	// Source address
+	opayload.source = MODULE_ADDRESS;
+	opayload.first = cc_tx_buff[0];
+	opayload.second = cc_tx_buff[1];
+	opayload.third = cc_tx_buff[2];
 
-    // checksumByte[0] = '0';
-    // checksumByte[1] = '1';
+    // Preparing our packet by copying our payload inside
+    // 0 and 1 indexes are for length and destination, respectively
+	memcpy((char*)&(cc_tx_data[2]), &opayload, sizeof(opayload_t));
 
-    // switch(opayload.first)
-    // {
-    //     case 'T':
-    //         checksumByte[2] = '0';
-    //         checksumByte[3] = '0';
-    //         break;
-    //     case 'L':
-    //         checksumByte[2] = '0';
-    //         checksumByte[3] = '1';
-    //         break;
-    //     case 'H':
-    //         checksumByte[2] = '1';
-    //         checksumByte[3] = '0';
-    //         break;
-    //     default:
-    //         checksumByte[2] = '1';
-    //         checksumByte[3] = '1';
-    //         break;
-    // }
+	/* Prepare buffer for sending */
+    // Length
+	cc_tx_data[0] = sizeof(opayload_t) + 1;
+    // Destination
+	cc_tx_data[1] = SENSORS_ADDRESS; // Change it for different sensors' microcontrollers
 
-    // switch(opayload.second)
-    // {
-    //     case 'T':
-    //         checksumByte[4] = '0';
-    //         checksumByte[5] = '0';
-    //         break;
-    //     case 'L':
-    //         checksumByte[4] = '0';
-    //         checksumByte[5] = '1';
-    //         break;
-    //     case 'H':
-    //         checksumByte[4] = '1';
-    //         checksumByte[5] = '0';
-    //         break;
-    //     default:
-    //         checksumByte[4] = '1';
-    //         checksumByte[5] = '1';
-    //         break;
-    // }
+	/* Send */
+	if (cc1101_tx_fifo_state() != 0) {
+		cc1101_flush_tx_fifo();
+	}
+	ret = cc1101_send_packet(cc_tx_data, (sizeof(opayload_t) + 2));
+	if(ret < 0)
+	{
+		// Since we don't use UART to signal problems and we don't have a screen
+        // here either, we're using what we can, aka the LEDs again.
+		gpio_clear(status_led_green);
+		gpio_set(status_led_red);
+	}
 
-    // switch(opayload.third)
-    // {
-    //     case 'T':
-    //         checksumByte[6] = '0';
-    //         checksumByte[7] = '0';
-    //         break;
-    //     case 'L':
-    //         checksumByte[6] = '0';
-    //         checksumByte[7] = '1';
-    //         break;
-    //     case 'H':
-    //         checksumByte[6] = '1';
-    //         checksumByte[7] = '0';
-    //         break;
-    //     default:
-    //         checksumByte[6] = '1';
-    //         checksumByte[7] = '1';
-    //         break;
-    // }
-
-    // // BIT OPERATIONS MAGIC
-    // cc_checksum = 0;
-    // for (int i = 0; i < 8; ++i )
-    //     cc_checksum |= (checksumByte[i] == '1') << (7 - i);
-
-    // // uprintf(UART0, "--- %c\n\r", cc_checksum);
-    // opayload.checksum = cc_checksum;
-    // char checksumByteL[8];
-    // for(int j = 0 ; j < 8; j++)
-    //     checksumByteL[j] = checksumByte[j];
-
-    // memcpy(&opayload.full, &checksumByteL, sizeof(checksumByte));
-
-    memcpy((char*)&(cc_tx_data[2]), &opayload, sizeof(opayload_t));
-    /* "Free" the rx buffer as soon as possible */
-    // cc_ptr = 0;
-    // cc_bit = 2;
-    /* Prepare buffer for sending */
-    cc_tx_data[0] = sizeof(opayload_t) + 1;
-    cc_tx_data[1] = SENSORS_ADDRESS; // Change it for different receptors
-    /* Send */
-    if (cc1101_tx_fifo_state() != 0) {
-        cc1101_flush_tx_fifo();
-    }
-    ret = cc1101_send_packet(cc_tx_data, (sizeof(opayload_t) + 2));
-    if(ret < 0)
-    {
-        // char data[20];
-        // snprintf(data, 20, "ERROR: %d - %d", ERROR_CC1101_SEND, ret);
-        // display_line(7, 0, data);
-        gpio_clear(status_led_green);
-        gpio_set(status_led_red);
-    }
-
-// #ifdef DEBUG
-//  // TODO: PRINT ON SCREEN INSTEAD!! UART0 WILL BE USED
-//  uprintf(UART0, "Tx ret: %d\n\r", ret);
-// #endif
+#ifdef DEBUG
+    uprintf(UART0, "Tx ret: %d\n\r", ret);
+#endif
 }
 
 /**************************************************************************** */
 int main(void)
 {
-    // int ret = 0;
-    system_init();
-    uart_on(UART0, 115200, handle_uart_cmd);
-    i2c_on(I2C0, I2C_CLK_100KHz, I2C_MASTER);
-    ssp_master_on(0, LPC_SSP_FRAME_SPI, 8, 4*1000*1000); /* bus_num, frame_type, data_width, rate */
+	// Setup phase
+	system_init();
+	uart_on(UART0, 115200, handle_uart_cmd);
+	i2c_on(I2C0, I2C_CLK_100KHz, I2C_MASTER);
+	ssp_master_on(0, LPC_SSP_FRAME_SPI, 8, 4*1000*1000); /* bus_num, frame_type, data_width, rate */
 
-    // status_led(green_only);
+	/* Radio */
+	rf_config();
 
-    /* Radio */
-    rf_config();
+	// When everything is up and running, we use the green LED
+	gpio_set(status_led_green);
 
-    // When everything is up and running, we use the green LED
-    // gpio_clear(status_led_orange);
-    gpio_set(status_led_green);
+	while (1)
+	{
+		uint8_t status = 0;
 
-    // uprintf(UART0, "App started\n\r");
-    while (1)
-    {
-        uint8_t status = 0;
-        // uprintf(UART0, "a");
+		/* RF */
+		if (cc_tx == 1) 
+		{
+			send_on_rf();
+			cc_tx = 0;
+		}
 
-        /* Alive notice*/
-        // chenillard(250);
+		/* Do not leave radio in an unknown or unwated state */
+		do
+		{
+			status = (cc1101_read_status() & CC1101_STATE_MASK);
+		} while (status == CC1101_STATE_TX);
 
-        /* RF */
+		if (status != CC1101_STATE_RX) {
+			static uint8_t loop = 0;
+			loop++;
+			if (loop > 10)
+			{
+				if (cc1101_rx_fifo_state() != 0)
+				{
+					cc1101_flush_rx_fifo();
+				}
+				cc1101_enter_rx_mode();
+				loop = 0;
+			}
+		}
 
-        //TODO : uprintf what we receive through handle_rf_rx_data
-
-        // For some fucking reason we won't enter handle_rf_rx_data if we don't 
-        // print something here.
-        // So I just print a NULL character byte.
-        // uprintf(UART0, "%c", 0x00);
-        // msleep(1000);
-        if (cc_tx == 1) 
-        {
-            send_on_rf();
-            cc_tx = 0;
-        }
-
-        // uprintf(UART0,"b");
-        /* Do not leave radio in an unknown or unwated state */
-        do
-        {
-            status = (cc1101_read_status() & CC1101_STATE_MASK);
-        } while (status == CC1101_STATE_TX);
-
-        // uprintf(UART0,"C");
-        if (status != CC1101_STATE_RX) {
-            static uint8_t loop = 0;
-            loop++;
-            if (loop > 10)
-            {
-                if (cc1101_rx_fifo_state() != 0)
-                {
-                    cc1101_flush_rx_fifo();
-                }
-                cc1101_enter_rx_mode();
-                loop = 0;
-            }
-        }
-
-        // uprintf(UART0,"D");
-        if (check_rx == 1)
-        {
-            handle_rf_rx_data();
-            check_rx = 0;
-        }
-    }
-    return 0;
+		if (check_rx == 1)
+		{
+			handle_rf_rx_data();
+			check_rx = 0;
+		}
+	}
+	return 0;
 }
